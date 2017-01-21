@@ -24,37 +24,32 @@
 `adafruit_sdcard`
 ====================================================
 
-Micro Python driver for SD cards using SPI bus.
+CircuitPython driver for SD cards using SPI bus.
 
 Requires an SPI bus and a CS pin.  Provides readblocks and writeblocks
 methods so the device can be mounted as a filesystem.
 
 Example usage on pyboard:
 
-    import pyb, sdcard, os
-    sd = sdcard.SDCard(pyb.SPI(1), pyb.Pin.board.X5)
-    pyb.mount(sd, '/sd2')
+    import nativeio
+    import filesystem
+    import adafruit_sdcard
+    import os
+    import board
+
+    spi = nativeio.SPI(SCK, MOSI, MISO)
+    sd = adafruit_sdcard.SDCard(spi, board.SD_CS)
+    filesystem.mount(sd, '/sd2')
     os.listdir('/')
-
-Example usage on ESP8266:
-
-    import machine, sdcard, os
-    sd = sdcard.SDCard(machine.SPI(0), machine.Pin(15))
-    os.umount()
-    os.VfsFat(sd, "")
-    os.listdir()
 
 * Author(s): Scott Shawcroft
 """
 
-"""
-
-"""
-
 from micropython import const
+from adafruit_bus_device import spi_device
 import time
 
-_CMD_TIMEOUT = const(100)
+_CMD_TIMEOUT = const(200)
 
 _R1_IDLE_STATE = const(1 << 0)
 #R1_ERASE_RESET = const(1 << 1)
@@ -67,41 +62,35 @@ _TOKEN_CMD25 = const(0xfc)
 _TOKEN_STOP_TRAN = const(0xfd)
 _TOKEN_DATA = const(0xfe)
 
-
 class SDCard:
     def __init__(self, spi, cs):
-        self.spi = spi
-        self.cs = cs
+        # This is the init baudrate. We create a second device for high speed.
+        self.spi = spi_device.SPIDevice(spi, cs, baudrate=250000, extra_clocks=8)
 
         self.cmdbuf = bytearray(6)
-        self.dummybuf = bytearray(512)
-        for i in range(512):
-            self.dummybuf[i] = 0xff
-        self.dummybuf_memoryview = memoryview(self.dummybuf)
+        self.single_byte = bytearray(1)
+
+        # Card is byte addressing, set to 1 if addresses are per block
+        self.cdv = 512
 
         # initialise the card
         self.init_card()
 
-    def init_spi(self, baudrate):
-        try:
-            master = self.spi.MASTER
-        except AttributeError:
-            # on ESP8266
-            self.spi.init(baudrate=baudrate, phase=0, polarity=0)
-        else:
-            # on pyboard
-            self.spi.init(master, baudrate=baudrate, phase=0, polarity=0)
+    def clock_card(self, cycles=8):
+        "Clock the bus a minimum of `cycles` with the chip select high."
+        while not self.spi.spi.try_lock():
+            pass
+        self.spi.spi.configure(baudrate=self.spi.baudrate)
+        self.spi.chip_select.value = True
+
+        self.single_byte[0] = 0xff
+        for i in range(cycles // 8 + 1):
+            self.spi.spi.write(self.single_byte)
+        self.spi.spi.unlock()
 
     def init_card(self):
-        # init CS pin
-        self.cs.init(self.cs.OUT, value=1)
-
-        # init SPI bus; use low data rate for initialisation
-        self.init_spi(100000)
-
-        # clock card at least 100 cycles with cs high
-        for i in range(16):
-            self.spi.write(b'\xff')
+        # clock card at least cycles with cs high
+        self.clock_card(80)
 
         # CMD0: init card; should return _R1_IDLE_STATE (allow 5 attempts)
         for _ in range(5):
@@ -121,46 +110,58 @@ class SDCard:
 
         # get the number of sectors
         # CMD9: response R2 (R1 byte + 16-byte block read)
-        if self.cmd(9, 0, 0, 0, False) != 0:
-            raise OSError("no response from SD card")
         csd = bytearray(16)
-        self.readinto(csd)
-        if csd[0] & 0xc0 != 0x40:
+        if self.cmd(9, 0, 0, response_buf=csd) != 0:
+            raise OSError("no response from SD card")
+        #self.readinto(csd)
+        csd_version = (csd[0] & 0xc0) >> 6
+        if csd_version >= 2:
             raise OSError("SD card CSD format not supported")
-        self.sectors = ((csd[8] << 8 | csd[9]) + 1) * 2014
-        #print('sectors', self.sectors)
+        print(csd)
+        if csd_version == 1:
+            self.sectors = ((csd[8] << 8 | csd[9]) + 1) * 1024
+        else:
+            block_length = 2 ** (csd[5] & 0xf)
+            c_size = ((csd[6] & 0x3) << 10) | (csd[7] << 2) | ((csd[8] & 0xc) >> 6)
+            mult = 2 ** (((csd[9] & 0x3) << 1 | (csd[10] & 0x80) >> 7) + 2)
+            print(mult, block_length)
+            self.sectors = block_length // 512 * mult * (c_size + 1)
+        print('sectors', self.sectors)
 
         # CMD16: set block length to 512 bytes
         if self.cmd(16, 512, 0) != 0:
             raise OSError("can't set 512 block size")
 
         # set to high data rate now that it's initialised
-        self.init_spi(1320000)
+        self.spi = spi_device.SPIDevice(self.spi.spi, self.spi.chip_select, baudrate=1320000, extra_clocks=8)
 
     def init_card_v1(self):
         for i in range(_CMD_TIMEOUT):
             self.cmd(55, 0, 0)
             if self.cmd(41, 0, 0) == 0:
-                self.cdv = 512
-                #print("[SDCard] v1 card")
+                print("[SDCard] v1 card")
                 return
         raise OSError("timeout waiting for v1 card")
 
     def init_card_v2(self):
         for i in range(_CMD_TIMEOUT):
-            time.sleep_ms(50)
+            time.sleep(.050)
             self.cmd(58, 0, 0, 4)
             self.cmd(55, 0, 0)
-            if self.cmd(41, 0x40000000, 0) == 0:
+            if self.block_cmd(41, 0x200000, 0) == 0:
                 self.cmd(58, 0, 0, 4)
                 self.cdv = 1
-                #print("[SDCard] v2 card")
+                print("[SDCard] v2 card")
                 return
         raise OSError("timeout waiting for v2 card")
 
-    def cmd(self, cmd, arg, crc, final=0, release=True):
-        self.cs.low()
+    def wait_for_ready(self, spi, timeout=0.3):
+        start_time = time.monotonic()
+        self.single_byte[0] = 0x00
+        while time.monotonic() - start_time < timeout and self.single_byte[0] != 0xff:
+            spi.readinto(self.single_byte, write_value=0xff)
 
+    def cmd(self, cmd, arg, crc, final=0, response_buf=None):
         # create and send the command
         buf = self.cmdbuf
         buf[0] = 0x40 | cmd
@@ -169,87 +170,125 @@ class SDCard:
         buf[3] = arg >> 8
         buf[4] = arg
         buf[5] = crc
-        self.spi.write(buf)
 
-        # wait for the repsonse (response[7] == 0)
-        for i in range(_CMD_TIMEOUT):
-            response = self.spi.read(1, 0xff)[0]
-            if not (response & 0x80):
-                # this could be a big-endian integer that we are getting here
-                for j in range(final):
-                    self.spi.write(b'\xff')
-                if release:
-                    self.cs.high()
-                    self.spi.write(b'\xff')
-                return response
+        with self.spi as spi:
+            self.wait_for_ready(spi)
 
-        # timeout
-        self.cs.high()
-        self.spi.write(b'\xff')
+            spi.write(buf)
+
+            # wait for the response (response[7] == 0)
+            for i in range(_CMD_TIMEOUT):
+                spi.readinto(buf, end=1, write_value=0xff)
+                if not (buf[0] & 0x80):
+                    # this could be a big-endian integer that we are getting here
+                    buf[1] = 0xff
+                    for _ in range(final):
+                        spi.write(buf, start=1, end=2)
+                    if response_buf:
+                        # Wait for the start block byte
+                        while buf[1] != 0xfe:
+                            spi.readinto(buf, start=1, end=2, write_value=0xff)
+                        spi.readinto(response_buf, write_value=0xff)
+
+                        # Read the checksum
+                        spi.readinto(buf, start=1, end=3, write_value=0xff)
+                    return buf[0]
+        return -1
+
+    def block_cmd(self, cmd, block, crc):
+        if self.cdv == 1:
+            self.cmd(cmd, block, crc)
+            return
+
+        # create and send the command
+        buf = self.cmdbuf
+        buf[0] = 0x40 | cmd
+        # We address by byte because cdv is 512. Instead of multiplying, shift
+        # the data to the correct spot so that we don't risk creating a long
+        # int.
+        buf[1] = (block >> 15) & 0xff
+        buf[2] = (block >> 7) & 0xff
+        buf[3] = (block << 1) & 0xff
+        buf[4] = 0
+        buf[5] = crc
+
+        with self.spi as spi:
+            spi.write(buf)
+
+            # wait for the response (response[7] == 0)
+            for i in range(_CMD_TIMEOUT):
+                spi.readinto(buf, end=1, write_value=0xff)
+                if not (buf[0] & 0x80):
+                    return buf[0]
         return -1
 
     def cmd_nodata(self, cmd):
-        self.spi.write(cmd)
-        self.spi.read(1, 0xff) # ignore stuff byte
-        for _ in range(_CMD_TIMEOUT):
-            if self.spi.read(1, 0xff)[0] == 0xff:
-                self.cs.high()
-                self.spi.write(b'\xff')
-                return 0    # OK
-        self.cs.high()
-        self.spi.write(b'\xff')
+        buf = self.cmdbuf
+        buf[0] = cmd
+        buf[1] = 0xff
+
+        with self.spi as spi:
+            spi.write(buf, end=2)
+            for _ in range(_CMD_TIMEOUT):
+                spi.readinto(buf, end=1, write_value=0xff)
+                if buf[0] == 0xff:
+                    return 0    # OK
         return 1 # timeout
 
-    def readinto(self, buf):
-        self.cs.low()
+    def readinto(self, buf, start=0, end=None):
+        if end is None:
+            end = len(buf)
+        with self.spi as spi:
+            # read until start byte (0xfe)
+            buf[start] = 0xff #b usy
+            while buf[start] == 0xff:
+                spi.readinto(buf, start=start, end=start+1, write_value=0xff)
 
-        # read until start byte (0xff)
-        while self.spi.read(1, 0xff)[0] != 0xfe:
-            pass
+            # If the first block isn't the start block byte (0xfe) then the card
+            # was ready and this is the first byte. So, read one less by
+            # shifting the start.
+            if buf[start] != 0xfe:
+                start += 1
 
-        # read data
-        mv = self.dummybuf_memoryview[:len(buf)]
-        self.spi.write_readinto(mv, buf)
+            spi.readinto(buf, start=start, end=end, write_value=0xff)
 
-        # read checksum
-        self.spi.write(b'\xff')
-        self.spi.write(b'\xff')
+            # read checksum and throw it away
+            spi.readinto(self.cmdbuf, end=2, write_value=0xff)
 
-        self.cs.high()
-        self.spi.write(b'\xff')
+    def write(self, token, buf, start=0, end=None):
+        cmd = self.cmdbuf
+        if end is None:
+            end = len(buf)
+        with self.spi as spi:
+            # send: start of block, data, checksum
+            buf[0] = token
+            spi.write(cmd, end=1)
+            spi.write(buf, start=start, end=end)
+            cmd[0] = 0xff
+            cmd[1] = 0xff
+            spi.write(cmd, end=2)
 
-    def write(self, token, buf):
-        self.cs.low()
+            # check the response
+            spi.read(cmd, end=1)
+            if (cmd[0] & 0x1f) != 0x05:
+                # TODO(tannewt): Is this an error?
+                return
 
-        # send: start of block, data, checksum
-        self.spi.read(1, token)
-        self.spi.write(buf)
-        self.spi.write(b'\xff')
-        self.spi.write(b'\xff')
-
-        # check the response
-        if (self.spi.read(1, 0xff)[0] & 0x1f) != 0x05:
-            self.cs.high()
-            self.spi.write(b'\xff')
-            return
-
-        # wait for write to finish
-        while self.spi.read(1, 0xff)[0] == 0:
-            pass
-
-        self.cs.high()
-        self.spi.write(b'\xff')
+            # wait for write to finish
+            spi.readinto(cmd, end=1, write_value=0xff)
+            while cmd[0] == 0:
+                spi.readinto(cmd, end=1, write_value=0xff)
 
     def write_token(self, token):
-        self.cs.low()
-        self.spi.read(1, token)
-        self.spi.write(b'\xff')
-        # wait for write to finish
-        while self.spi.read(1, 0xff)[0] == 0x00:
-            pass
-
-        self.cs.high()
-        self.spi.write(b'\xff')
+        cmd = self.cmdbuf
+        with self.spi as spi:
+            cmd[0] = token
+            cmd[1] = 0xff
+            spi.write(cmd, end=2)
+            # wait for write to finish
+            spi.readinto(buf, end=1, write_value=0xff)
+            while buf[0] == 0:
+                spi.readinto(buf, end=1, write_value=0xff)
 
     def count(self):
         return self.sectors
@@ -259,18 +298,17 @@ class SDCard:
         assert nblocks and not err, 'Buffer length is invalid'
         if nblocks == 1:
             # CMD17: set read address for single block
-            if self.cmd(17, block_num * self.cdv, 0) != 0:
+            if self.block_cmd(17, block_num, 0) != 0:
                 return 1
             # receive the data
             self.readinto(buf)
         else:
             # CMD18: set read address for multiple blocks
-            if self.cmd(18, block_num * self.cdv, 0) != 0:
+            if self.block_cmd(18, block_num, 0) != 0:
                 return 1
             offset = 0
-            mv = memoryview(buf)
             while nblocks:
-                self.readinto(mv[offset : offset + 512])
+                self.readinto(buf, start=offset, end=(offset + 512))
                 offset += 512
                 nblocks -= 1
             return self.cmd_nodata(b'\x0c') # cmd 12
@@ -281,20 +319,19 @@ class SDCard:
         assert nblocks and not err, 'Buffer length is invalid'
         if nblocks == 1:
             # CMD24: set write address for single block
-            if self.cmd(24, block_num * self.cdv, 0) != 0:
+            if self.block_cmd(24, block_num, 0) != 0:
                 return 1
 
             # send the data
             self.write(_TOKEN_DATA, buf)
         else:
             # CMD25: set write address for first block
-            if self.cmd(25, block_num * self.cdv, 0) != 0:
+            if self.block_cmd(25, block_num, 0) != 0:
                 return 1
             # send the data
             offset = 0
-            mv = memoryview(buf)
             while nblocks:
-                self.write(_TOKEN_CMD25, mv[offset : offset + 512])
+                self.write(_TOKEN_CMD25, mv, start=offset, end=(offset + 512))
                 offset += 512
                 nblocks -= 1
             self.write_token(_TOKEN_STOP_TRAN)
