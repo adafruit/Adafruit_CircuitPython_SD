@@ -15,7 +15,12 @@ extensions = [
     'sphinx.ext.viewcode',
 ]
 
-intersphinx_mapping = {'python': ('https://docs.python.org/3.4', None),'BusDevice': ('https://circuitpython.readthedocs.io/projects/bus_device/en/latest/', None),'CircuitPython': ('https://circuitpython.readthedocs.io/en/latest/', None)}
+
+autodoc_mock_imports = ["adafruit_bus_device", "micropython"]
+
+intersphinx_mapping = {'python': ('https://docs.python.org/3.4', None),
+                       'BusDevice': ('https://circuitpython.readthedocs.io/projects/bus_device/en/latest/', None),
+                       'CircuitPython': ('https://circuitpython.readthedocs.io/en/latest/', None)}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -26,7 +31,7 @@ source_suffix = '.rst'
 master_doc = 'README'
 
 # General information about the project.
-project = u'Adafruit SDCARD Library'
+project = u'Adafruit SD Card Library'
 copyright = u'2017 Scott Shawcroft'
 author = u'Scott Shawcroft'
 
@@ -91,7 +96,7 @@ else:
 html_static_path = ['_static']
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'AdafruitSDCARDLibrarydoc'
+htmlhelp_basename = 'AdafruitSD CardLibrarydoc'
 
 # -- Options for LaTeX output ---------------------------------------------
 
@@ -117,7 +122,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'AdafruitSDCARDLibrary.tex', u'Adafruit SDCARD Library Documentation',
+    (master_doc, 'AdafruitSD CardLibrary.tex', u'Adafruit SD Card Library Documentation',
      u'Phiilip Moyer', 'manual'),
 ]
 
@@ -126,7 +131,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'adafruitSDCARDlibrary', u'Adafruit SDCARD Library Documentation',
+    (master_doc, 'adafruitSD Cardlibrary', u'Adafruit SD Card Library Documentation',
      [author], 1)
 ]
 
@@ -136,7 +141,7 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'AdafruitSDCARDLibrary', u'Adafruit SDCARD Library Documentation',
-     author, 'AdafruitSDCARDLibrary', 'One line description of project.',
+    (master_doc, 'AdafruitSD CardLibrary', u'Adafruit SD Card Library Documentation',
+     author, 'AdafruitSD CardLibrary', 'One line description of project.',
      'Miscellaneous'),
 ]

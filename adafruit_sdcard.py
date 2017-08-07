@@ -21,7 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 """
-`adafruit_sdcard`
+`adafruit_sdcard` - SD card over SPI driver
 ====================================================
 
 CircuitPython driver for SD cards using SPI bus.
@@ -31,15 +31,18 @@ methods so the device can be mounted as a filesystem.
 
 Example usage:
 
+.. code-block:: python
+
     import busio
-    import filesystem
+    import storage
     import adafruit_sdcard
     import os
     import board
 
     spi = busio.SPI(SCK, MOSI, MISO)
     sd = adafruit_sdcard.SDCard(spi, board.SD_CS)
-    filesystem.mount(sd, '/sd2')
+    vfs = storage.VfsFat(sdcard)
+    storage.mount(vfs, '/sd')
     os.listdir('/')
 
 * Author(s): Scott Shawcroft
@@ -63,6 +66,10 @@ _TOKEN_STOP_TRAN = const(0xfd)
 _TOKEN_DATA = const(0xfe)
 
 class SDCard:
+    """Controls an SD card over SPI.
+
+        :param ~busio.SPI spi: The SPI bus
+        :param ~digitalio.DigitalInOut cs: The chip select connected to the card"""
     def __init__(self, spi, cs):
         # This is the init baudrate. We create a second device for high speed.
         self._spi = spi_device.SPIDevice(spi, cs, baudrate=250000, extra_clocks=8)
