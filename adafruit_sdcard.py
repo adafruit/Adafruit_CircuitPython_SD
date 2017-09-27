@@ -221,14 +221,14 @@ class SDCard:
                     return buf[0]
         return -1
 
-    def _block_cmd(self, cmd, block, crc):
+    def _block_cmd(self, cmd, block, crc, response_buf=None):
         """Issue a command to the card with a block argument.
 
             :param int cmd: The command number.
             :param int block: The relevant block.
             :param int crc: The crc to allow the card to verify the command and argument."""
         if self._cdv == 1:
-            return self._cmd(cmd, block, crc)
+            return self._cmd(cmd, block, crc, response_buf=response_buf)
 
         # create and send the command
         buf = self._cmdbuf
@@ -242,6 +242,7 @@ class SDCard:
         buf[4] = 0
         buf[5] = crc
 
+        result = -1
         with self._spi as spi:
             self._wait_for_ready(spi)
 
@@ -251,8 +252,13 @@ class SDCard:
             for i in range(_CMD_TIMEOUT):
                 spi.readinto(buf, end=1, write_value=0xff)
                 if not (buf[0] & 0x80):
-                    return buf[0]
-        return -1
+                    result = buf[0]
+                    break
+
+        if response_buf != None and result == 0:
+            self._readinto(response_buf)
+
+        return result
 
     def _cmd_nodata(self, cmd, response=0xff):
         """Issue a command to the card with no argument.
@@ -340,10 +346,10 @@ class SDCard:
         assert nblocks and not err, 'Buffer length is invalid'
         if nblocks == 1:
             # CMD17: set read address for single block
-            if self._block_cmd(17, start_block, 0) != 0:
+            # We use _block_cmd to read our data so that the chip select line
+            # isn't toggled between the command, response and data.
+            if self._block_cmd(17, start_block, 0, response_buf=buf) != 0:
                 return 1
-            # receive the data
-            self._readinto(buf)
         else:
             # CMD18: set read address for multiple blocks
             if self._block_cmd(18, start_block, 0) != 0:
