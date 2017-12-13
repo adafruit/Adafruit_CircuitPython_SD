@@ -48,9 +48,12 @@ Example usage:
 * Author(s): Scott Shawcroft
 """
 
+import time
 from micropython import const
 from adafruit_bus_device import spi_device
-import time
+
+__version__ = "0.0.0-auto.0"
+__repo__ = "https://github.com/adafruit/Adafruit_CircuitPython_SD.git"
 
 _CMD_TIMEOUT = const(200)
 
@@ -65,6 +68,7 @@ _TOKEN_CMD25 = const(0xfc)
 _TOKEN_STOP_TRAN = const(0xfd)
 _TOKEN_DATA = const(0xfe)
 
+#pylint: disable-msg=superfluous-parens
 class SDCard:
     """Controls an SD card over SPI.
 
@@ -94,7 +98,7 @@ class SDCard:
         self._spi.chip_select.value = True
 
         self._single_byte[0] = 0xff
-        for i in range(cycles // 8 + 1):
+        for _ in range(cycles // 8 + 1):
             self._spi.spi.write(self._single_byte)
         self._spi.spi.unlock()
 
@@ -111,8 +115,8 @@ class SDCard:
             raise OSError("no SD card")
 
         # CMD8: determine card version
-        r7 = bytearray(4)
-        r = self._cmd(8, 0x01aa, 0x87, r7, data_block=False)
+        rb7 = bytearray(4)
+        r = self._cmd(8, 0x01aa, 0x87, rb7, data_block=False)
         if r == _R1_IDLE_STATE:
             self._init_card_v2()
         elif r == (_R1_IDLE_STATE | _R1_ILLEGAL_COMMAND):
@@ -143,11 +147,12 @@ class SDCard:
             raise OSError("can't set 512 block size")
 
         # set to high data rate now that it's initialised
-        self._spi = spi_device.SPIDevice(self._spi.spi, self._spi.chip_select, baudrate=1320000, extra_clocks=8)
+        self._spi = spi_device.SPIDevice(self._spi.spi, self._spi.chip_select,
+                                         baudrate=1320000, extra_clocks=8)
 
     def _init_card_v1(self):
         """Initialize v1 SDCards which use byte addressing."""
-        for i in range(_CMD_TIMEOUT):
+        for _ in range(_CMD_TIMEOUT):
             self._cmd(55, 0, 0)
             if self._cmd(41, 0, 0) == 0:
                 #print("[SDCard] v1 card")
@@ -157,7 +162,7 @@ class SDCard:
     def _init_card_v2(self):
         """Initialize v2 SDCards which use 512-byte block addressing."""
         ocr = bytearray(4)
-        for i in range(_CMD_TIMEOUT):
+        for _ in range(_CMD_TIMEOUT):
             time.sleep(.050)
             self._cmd(58, response_buf=ocr, data_block=False)
             self._cmd(55)
@@ -181,6 +186,7 @@ class SDCard:
         while time.monotonic() - start_time < timeout and self._single_byte[0] != 0xff:
             spi.readinto(self._single_byte, write_value=0xff)
 
+    #pylint: disable-msg=too-many-arguments
     def _cmd(self, cmd, arg=0, crc=0, response_buf=None, data_block=True, wait=True):
         """Issue a command to the card and read an optional data response.
 
@@ -205,7 +211,7 @@ class SDCard:
             spi.write(buf)
 
             # wait for the response (response[7] == 0)
-            for i in range(_CMD_TIMEOUT):
+            for _ in range(_CMD_TIMEOUT):
                 spi.readinto(buf, end=1, write_value=0xff)
                 if not (buf[0] & 0x80):
                     if response_buf:
@@ -220,6 +226,7 @@ class SDCard:
                             spi.readinto(buf, start=1, end=3, write_value=0xff)
                     return buf[0]
         return -1
+    #pylint: enable-msg=too-many-arguments
 
     def _block_cmd(self, cmd, block, crc, response_buf=None):
         """Issue a command to the card with a block argument.
@@ -249,7 +256,7 @@ class SDCard:
             spi.write(buf)
 
             # wait for the response (response[7] == 0)
-            for i in range(_CMD_TIMEOUT):
+            for _ in range(_CMD_TIMEOUT):
                 spi.readinto(buf, end=1, write_value=0xff)
                 if not (buf[0] & 0x80):
                     result = buf[0]
@@ -317,7 +324,7 @@ class SDCard:
             spi.write(cmd, end=2)
 
             # check the response
-            for i in range(_CMD_TIMEOUT):
+            for _ in range(_CMD_TIMEOUT):
                 spi.readinto(cmd, end=1, write_value=0xff)
                 if not (cmd[0] & 0x80):
                     if (cmd[0] & 0x1f) != 0x05:
