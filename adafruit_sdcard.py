@@ -337,6 +337,8 @@ class SDCard:
             while cmd[0] == 0:
                 spi.readinto(cmd, end=1, write_value=0xff)
 
+        return 0 # worked
+
     def count(self):
         """Returns the total number of sectors.
 
