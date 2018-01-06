@@ -31,7 +31,7 @@ def print_directory(path, tabs=0):
         isdir = stats[0] & 0x4000
 
         if filesize < 1000:
-            sizestr = str(filesize) + " by"
+            sizestr = str(filesize) + " bytes"
         elif filesize < 1000000:
             sizestr = "%0.1f KB" % (filesize/1000)
         else:
