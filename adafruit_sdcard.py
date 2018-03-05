@@ -29,23 +29,30 @@ CircuitPython driver for SD cards using SPI bus.
 Requires an SPI bus and a CS pin.  Provides readblocks and writeblocks
 methods so the device can be mounted as a filesystem.
 
-Example usage:
-
-.. code-block:: python
-
-    import busio
-    import storage
-    import adafruit_sdcard
-    import os
-    import board
-
-    spi = busio.SPI(SCK, MOSI, MISO)
-    sd = adafruit_sdcard.SDCard(spi, board.SD_CS)
-    vfs = storage.VfsFat(sdcard)
-    storage.mount(vfs, '/sd')
-    os.listdir('/')
-
 * Author(s): Scott Shawcroft
+
+Implementation Notes
+--------------------
+
+**Hardware:**
+
+* Adafruit `MicroSD card breakout board+
+  <https://www.adafruit.com/product/254>`_ (Product ID: 254)
+
+* Adafruit `Assembled Data Logging shield for Arduino
+  <https://www.adafruit.com/product/1141>`_ (Product ID: 1141)
+
+* Adafruit `Feather M0 Adalogger
+  <https://www.adafruit.com/product/2796>`_ (Product ID: 2796)
+
+* Adalogger `FeatherWing - RTC + SD Add-on For All Feather Boards
+  <https://www.adafruit.com/product/2922>`_ (Product ID: 2922)
+
+**Software and Dependencies:**
+
+* Adafruit CircuitPython firmware for the ESP8622 and M0-based boards:
+  https://github.com/adafruit/circuitpython/releases
+* Adafruit's Bus Device library: https://github.com/adafruit/Adafruit_CircuitPython_BusDevice
 """
 
 import time
@@ -73,7 +80,25 @@ class SDCard:
     """Controls an SD card over SPI.
 
         :param ~busio.SPI spi: The SPI bus
-        :param ~digitalio.DigitalInOut cs: The chip select connected to the card"""
+        :param ~digitalio.DigitalInOut cs: The chip select connected to the card
+
+        Example usage:
+
+        .. code-block:: python
+
+            import busio
+            import storage
+            import adafruit_sdcard
+            import os
+            import board
+
+            spi = busio.SPI(SCK, MOSI, MISO)
+            sd = adafruit_sdcard.SDCard(spi, board.SD_CS)
+            vfs = storage.VfsFat(sdcard)
+            storage.mount(vfs, '/sd')
+            os.listdir('/')
+
+        """
     def __init__(self, spi, cs):
         # This is the init baudrate. We create a second device for high speed.
         self._spi = spi_device.SPIDevice(spi, cs, baudrate=250000, extra_clocks=8)
@@ -88,9 +113,10 @@ class SDCard:
         self._init_card()
 
     def _clock_card(self, cycles=8):
-        """Clock the bus a minimum of `cycles` with the chip select high.
+        """
+        Clock the bus a minimum of `cycles` with the chip select high.
 
-            :param int cycles: The minimum number of clock cycles to cycle the bus.
+        :param int cycles: The minimum number of clock cycles to cycle the bus.
         """
         while not self._spi.spi.try_lock():
             pass
@@ -177,10 +203,12 @@ class SDCard:
         raise OSError("timeout waiting for v2 card")
 
     def _wait_for_ready(self, spi, timeout=0.3):
-        """Wait for the card to clock out 0xff to indicate its ready.
+        """
+        Wait for the card to clock out 0xff to indicate its ready.
 
-            :param busio.SPI spi: The locked SPI bus.
-            :param float timeout: Maximum time to wait in seconds."""
+        :param busio.SPI spi: The locked SPI bus.
+        :param float timeout: Maximum time to wait in seconds.
+        """
         start_time = time.monotonic()
         self._single_byte[0] = 0x00
         while time.monotonic() - start_time < timeout and self._single_byte[0] != 0xff:
@@ -188,13 +216,15 @@ class SDCard:
 
     #pylint: disable-msg=too-many-arguments
     def _cmd(self, cmd, arg=0, crc=0, response_buf=None, data_block=True, wait=True):
-        """Issue a command to the card and read an optional data response.
+        """
+        Issue a command to the card and read an optional data response.
 
-            :param int cmd: The command number.
-            :param int arg: The command argument.
-            :param int crc: The crc to allow the card to verify the command and argument.
-            :param bytearray response_buf: Buffer to read a data block response into.
-            :param bool data_block: True if the response data is in a data block."""
+        :param int cmd: The command number.
+        :param int arg: The command argument.
+        :param int crc: The crc to allow the card to verify the command and argument.
+        :param bytearray response_buf: Buffer to read a data block response into.
+        :param bool data_block: True if the response data is in a data block.
+        """
         # create and send the command
         buf = self._cmdbuf
         buf[0] = 0x40 | cmd
@@ -229,11 +259,13 @@ class SDCard:
     #pylint: enable-msg=too-many-arguments
 
     def _block_cmd(self, cmd, block, crc, response_buf=None):
-        """Issue a command to the card with a block argument.
+        """
+        Issue a command to the card with a block argument.
 
-            :param int cmd: The command number.
-            :param int block: The relevant block.
-            :param int crc: The crc to allow the card to verify the command and argument."""
+        :param int cmd: The command number.
+        :param int block: The relevant block.
+        :param int crc: The crc to allow the card to verify the command and argument.
+        """
         if self._cdv == 1:
             return self._cmd(cmd, block, crc, response_buf=response_buf)
 
@@ -268,9 +300,11 @@ class SDCard:
         return result
 
     def _cmd_nodata(self, cmd, response=0xff):
-        """Issue a command to the card with no argument.
+        """
+        Issue a command to the card with no argument.
 
-            :param int cmd: The command number."""
+        :param int cmd: The command number.
+        """
         buf = self._cmdbuf
         buf[0] = cmd
         buf[1] = 0xff
@@ -284,11 +318,13 @@ class SDCard:
         return 1 # timeout
 
     def _readinto(self, buf, start=0, end=None):
-        """Read a data block into buf.
+        """
+        Read a data block into buf.
 
-            :param bytearray buf: The buffer to write into
-            :param int start: The first index to write data at
-            :param int end: The index after the last byte to write to"""
+        :param bytearray buf: The buffer to write into
+        :param int start: The first index to write data at
+        :param int end: The index after the last byte to write to.
+        """
         if end is None:
             end = len(buf)
         with self._spi as spi:
@@ -303,12 +339,14 @@ class SDCard:
             spi.readinto(self._cmdbuf, end=2, write_value=0xff)
 
     def _write(self, token, buf, start=0, end=None):
-        """Write a data block to the card.
+        """
+        Write a data block to the card.
 
-            :param int token: The start token
-            :param bytearray buf: The buffer to write from
-            :param int start: The first index to read data from
-            :param int end: The index after the last byte to read from"""
+        :param int token: The start token
+        :param bytearray buf: The buffer to write from
+        :param int start: The first index to read data from
+        :param int end: The index after the last byte to read from.
+        """
         cmd = self._cmdbuf
         if end is None:
             end = len(buf)
@@ -340,17 +378,21 @@ class SDCard:
         return 0 # worked
 
     def count(self):
-        """Returns the total number of sectors.
+        """
+        Returns the total number of sectors.
 
-            :return: The number of 512-byte blocks
-            :rtype: int"""
+        :return: The number of 512-byte blocks
+        :rtype: int
+        """
         return self._sectors
 
     def readblocks(self, start_block, buf):
-        """Read one or more blocks from the card
+        """
+        Read one or more blocks from the card
 
-            :param int start_block: The block to start reading from
-            :param bytearray buf: The buffer to write into. Length must be multiple of 512."""
+        :param int start_block: The block to start reading from
+        :param bytearray buf: The buffer to write into. Length must be multiple of 512.
+        """
         nblocks, err = divmod(len(buf), 512)
         assert nblocks and not err, 'Buffer length is invalid'
         if nblocks == 1:
@@ -372,10 +414,12 @@ class SDCard:
         return 0
 
     def writeblocks(self, start_block, buf):
-        """Write one or more blocks to the card
+        """
+        Write one or more blocks to the card
 
-            :param int start_block: The block to start writing to
-            :param bytearray buf: The buffer to write into. Length must be multiple of 512."""
+        :param int start_block: The block to start writing to
+        :param bytearray buf: The buffer to write into. Length must be multiple of 512.
+        """
         nblocks, err = divmod(len(buf), 512)
         assert nblocks and not err, 'Buffer length is invalid'
         if nblocks == 1:
