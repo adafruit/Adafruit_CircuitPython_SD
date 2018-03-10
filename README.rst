@@ -2,13 +2,17 @@
 Introduction
 ============
 
-.. image:: https://readthedocs.org/projects/adafruit-circuitpython-sdcard/badge/?version=latest
-    :target: https://circuitpython.readthedocs.io/projects/sdcard/en/latest/
+.. image:: https://readthedocs.org/projects/adafruit-circuitpython-sd/badge/?version=latest
+    :target: https://circuitpython.readthedocs.io/projects/sd/en/latest/
     :alt: Documentation Status
 
 .. image :: https://img.shields.io/discord/327254708534116352.svg
     :target: https://adafru.it/discord
     :alt: Discord
+
+.. image:: https://travis-ci.org/adafruit/Adafruit_CircuitPython_SD.svg?branch=master
+    :target: https://travis-ci.org/adafruit/Adafruit_CircuitPython_SD
+    :alt: Build Status
 
 CircuitPython driver for SD cards. This implements the basic reading and writing
 block functionality needed to mount an SD card using `storage.VfsFat`.
