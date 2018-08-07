@@ -214,7 +214,9 @@ class SDCard:
         while time.monotonic() - start_time < timeout and self._single_byte[0] != 0xff:
             spi.readinto(self._single_byte, write_value=0xff)
 
-    #pylint: disable-msg=too-many-arguments
+    # pylint: disable-msg=too-many-arguments
+    # pylint: disable=no-member
+    # no-member disable should be reconsidered when it can be tested
     def _cmd(self, cmd, arg=0, crc=0, response_buf=None, data_block=True, wait=True):
         """
         Issue a command to the card and read an optional data response.
@@ -294,6 +296,8 @@ class SDCard:
                     result = buf[0]
                     break
 
+        # pylint: disable=singleton-comparison
+        # Disable should be removed when refactor can be tested.
         if response_buf != None and result == 0:
             self._readinto(response_buf)
 
@@ -362,6 +366,8 @@ class SDCard:
             spi.write(cmd, end=2)
 
             # check the response
+            # pylint: disable=no-else-return
+            # Disable should be removed when refactor can be tested
             for _ in range(_CMD_TIMEOUT):
                 spi.readinto(cmd, end=1, write_value=0xff)
                 if not (cmd[0] & 0x80):
