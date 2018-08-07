@@ -16,7 +16,7 @@ extensions = [
 ]
 
 
-autodoc_mock_imports = ["adafruit_bus_device", "micropython"]
+# autodoc_mock_imports = ["adafruit_bus_device", "micropython"]
 
 intersphinx_mapping = {'python': ('https://docs.python.org/3.4', None),
                        'BusDevice': ('https://circuitpython.readthedocs.io/projects/busdevice/en/latest/', None),
