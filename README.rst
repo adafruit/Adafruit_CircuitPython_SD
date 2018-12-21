@@ -10,8 +10,8 @@ Introduction
     :target: https://adafru.it/discord
     :alt: Discord
 
-.. image:: https://travis-ci.org/adafruit/Adafruit_CircuitPython_SD.svg?branch=master
-    :target: https://travis-ci.org/adafruit/Adafruit_CircuitPython_SD
+.. image:: https://travis-ci.com/adafruit/Adafruit_CircuitPython_SD.svg?branch=master
+    :target: https://travis-ci.com/adafruit/Adafruit_CircuitPython_SD
     :alt: Build Status
 
 CircuitPython driver for SD cards. This implements the basic reading and writing
