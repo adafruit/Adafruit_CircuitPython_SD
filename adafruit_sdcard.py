@@ -230,10 +230,10 @@ class SDCard:
         # create and send the command
         buf = self._cmdbuf
         buf[0] = 0x40 | cmd
-        buf[1] = arg >> 24
-        buf[2] = arg >> 16
-        buf[3] = arg >> 8
-        buf[4] = arg
+        buf[1] = (arg >> 24) & 0xff
+        buf[2] = (arg >> 16) & 0xff
+        buf[3] = (arg >> 8) & 0xff
+        buf[4] = arg & 0xff
         buf[5] = crc
 
         with self._spi as spi:
