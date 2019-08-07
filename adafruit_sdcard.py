@@ -169,7 +169,7 @@ class SDCard:
             self._sectors = block_length // 512 * mult * (c_size + 1)
 
         # CMD16: set block length to 512 bytes
-        if self._cmd(16, 512, 0x81) != 0:
+        if self._cmd(16, 512, 0x15) != 0:
             raise OSError("can't set 512 block size")
 
         # set to high data rate now that it's initialised
@@ -234,6 +234,10 @@ class SDCard:
         buf[2] = (arg >> 16) & 0xff
         buf[3] = (arg >> 8) & 0xff
         buf[4] = arg & 0xff
+		if (!crc):
+		    buf[5] = calculate_crc(buf[:-1])
+		else:
+            buf[5] = crc
         buf[5] = crc
 
         with self._spi as spi:
@@ -281,7 +285,10 @@ class SDCard:
         buf[2] = (block >> 7) & 0xff
         buf[3] = (block << 1) & 0xff
         buf[4] = 0
-        buf[5] = crc
+		if (!crc):
+		    buf[5] = calculate_crc(buf[:-1])
+		else:
+            buf[5] = crc
 
         result = -1
         with self._spi as spi:
@@ -405,18 +412,18 @@ class SDCard:
             # CMD17: set read address for single block
             # We use _block_cmd to read our data so that the chip select line
             # isn't toggled between the command, response and data.
-            if self._block_cmd(17, start_block, 0x3b, response_buf=buf) != 0:
+            if self._block_cmd(17, start_block, 0, response_buf=buf) != 0:
                 return 1
         else:
             # CMD18: set read address for multiple blocks
-            if self._block_cmd(18, start_block, 0x57) != 0:
+            if self._block_cmd(18, start_block, 0) != 0:
                 return 1
             offset = 0
             while nblocks:
                 self._readinto(buf, start=offset, end=(offset + 512))
                 offset += 512
                 nblocks -= 1
-            return self._cmd(12, 0, 0x09, wait=False)
+            return self._cmd(12, 0, 0x61, wait=False)
         return 0
 
     def writeblocks(self, start_block, buf):
@@ -430,14 +437,14 @@ class SDCard:
         assert nblocks and not err, 'Buffer length is invalid'
         if nblocks == 1:
             # CMD24: set write address for single block
-            if self._block_cmd(24, start_block, 0x6f) != 0:
+            if self._block_cmd(24, start_block, 0) != 0:
                 return 1
 
             # send the data
             self._write(_TOKEN_DATA, buf)
         else:
             # CMD25: set write address for first block
-            if self._block_cmd(25, start_block, 0x03) != 0:
+            if self._block_cmd(25, start_block, 0) != 0:
                 return 1
             # send the data
             offset = 0
@@ -447,3 +454,29 @@ class SDCard:
                 nblocks -= 1
             self._cmd_nodata(_TOKEN_STOP_TRAN, 0x0)
         return 0
+
+    def calculate_crc(message):
+    # Code converted from https://github.com/hazelnusse/crc7/blob/master/crc7.cc by devoh747
+    # With permission from Dale Lukas Peterson <hazelnusse@gmail.com>
+    # 8/6/2019
+
+        CRCTable = bytearray(256)
+
+        CRCPoly = const(0x89)  # the value of our CRC-7 polynomial
+
+        # generate a table value for all 256 possible byte values
+        for i in range(256): 
+            if (i & 0x80):
+                CRCTable[i] = i ^ CRCPoly
+            else:
+                CRCTable[i] = i
+            for _ in range(1,8):        
+                CRCTable[i] = CRCTable[i] << 1
+                if (CRCTable[i] & 0x80):
+                    CRCTable[i] = CRCTable[i] ^ CRCPoly
+
+        CRC = 0
+        for i in range(len(message)):
+            CRC = CRCTable[(CRC << 1) ^ message[i]]
+    
+        return ((CRC << 1) | 1)
