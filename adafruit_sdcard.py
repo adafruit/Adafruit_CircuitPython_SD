@@ -236,7 +236,7 @@ class SDCard:
         buf[4] = arg & 0xff
 
         if (crc == 0):
-            buf[5] = self.calculate_crc(buf[:-1])
+            buf[5] = calculate_crc(buf[:-1])
         else:
             buf[5] = crc
 
@@ -287,7 +287,7 @@ class SDCard:
         buf[4] = 0
 
         if (crc == 0):
-            buf[5] = self.calculate_crc(buf[:-1])
+            buf[5] = calculate_crc(buf[:-1])
         else:
             buf[5] = crc
 
@@ -456,32 +456,32 @@ class SDCard:
             self._cmd_nodata(_TOKEN_STOP_TRAN, 0x0)
         return 0
 
-    def calculate_crc(self, message):
-        """
-        Calculate the CRC of a message.
-        :param bytearray message: Where each index is a byte
-        """
+def calculate_crc(message):
+    """
+    Calculate the CRC of a message.
+    :param bytearray message: Where each index is a byte
+    """
     # Code converted from https://github.com/hazelnusse/crc7/blob/master/crc7.cc by devoh747
     # With permission from Dale Lukas Peterson <hazelnusse@gmail.com>
     # 8/6/2019
 
-        crc_table = bytearray(256)
+    crc_table = bytearray(256)
 
-        crc_poly = const(0x89)  # the value of our CRC-7 polynomial
+    crc_poly = const(0x89)  # the value of our CRC-7 polynomial
 
-        # generate a table value for all 256 possible byte values
-        for i in range(256):
-            if (i & 0x80):
-                crc_table[i] = i ^ crc_poly
-            else:
-                crc_table[i] = i
-            for _ in range(1, 8):
-                crc_table[i] = crc_table[i] << 1
-                if (crc_table[i] & 0x80):
-                    crc_table[i] = crc_table[i] ^ crc_poly
+    # generate a table value for all 256 possible byte values
+    for i in range(256):
+        if (i & 0x80):
+            crc_table[i] = i ^ crc_poly
+        else:
+            crc_table[i] = i
+        for _ in range(1, 8):
+            crc_table[i] = crc_table[i] << 1
+            if (crc_table[i] & 0x80):
+                crc_table[i] = crc_table[i] ^ crc_poly
 
-        crc = 0
-        for i in range(len(message)):
-            crc = crc_table[(crc << 1) ^ message[i]]
+    crc = 0
+    for i in range(len(message)):
+        crc = crc_table[(crc << 1) ^ message[i]]
 
-        return ((crc << 1) | 1)
+    return ((crc << 1) | 1)
