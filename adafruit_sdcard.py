@@ -481,7 +481,8 @@ def calculate_crc(message):
                 crc_table[i] = crc_table[i] ^ crc_poly
 
     crc = 0
-    for i in range(len(message)):
+    # All messages in _cmd are 5 bytes including the cmd.. The 6th byte is the crc value.
+    for i in range(0, 5):
         crc = crc_table[(crc << 1) ^ message[i]]
 
     return ((crc << 1) | 1)
