@@ -457,27 +457,31 @@ class SDCard:
         return 0
 
     def calculate_crc(self, message):
+        """
+        Calculate the CRC of a message.
+        :param bytearray message: Where each index is a byte
+        """
     # Code converted from https://github.com/hazelnusse/crc7/blob/master/crc7.cc by devoh747
     # With permission from Dale Lukas Peterson <hazelnusse@gmail.com>
     # 8/6/2019
 
-        CRCTable = bytearray(256)
+        crc_table = bytearray(256)
 
-        CRCPoly = const(0x89)  # the value of our CRC-7 polynomial
+        crc_poly = const(0x89)  # the value of our CRC-7 polynomial
 
         # generate a table value for all 256 possible byte values
         for i in range(256):
             if (i & 0x80):
-                CRCTable[i] = i ^ CRCPoly
+                crc_table[i] = i ^ crc_poly
             else:
-                CRCTable[i] = i
-            for _ in range(1,8):
-                CRCTable[i] = CRCTable[i] << 1
-                if (CRCTable[i] & 0x80):
-                    CRCTable[i] = CRCTable[i] ^ CRCPoly
+                crc_table[i] = i
+            for _ in range(1, 8):
+                crc_table[i] = crc_table[i] << 1
+                if (crc_table[i] & 0x80):
+                    crc_table[i] = crc_table[i] ^ crc_poly
 
-        CRC = 0
+        crc = 0
         for i in range(len(message)):
-            CRC = CRCTable[(CRC << 1) ^ message[i]]
+            crc = crc_table[(crc << 1) ^ message[i]]
 
-        return ((CRC << 1) | 1)
+        return ((crc << 1) | 1)
