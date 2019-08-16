@@ -153,7 +153,7 @@ class SDCard:
         # get the number of sectors
         # CMD9: response R2 (R1 byte + 16-byte block read)
         csd = bytearray(16)
-        if self._cmd(9, response_buf=csd) != 0:
+        if self._cmd(9, 0, 0xaf, response_buf=csd) != 0:
             raise OSError("no response from SD card")
         #self.readinto(csd)
         csd_version = (csd[0] & 0xc0) >> 6
@@ -169,7 +169,7 @@ class SDCard:
             self._sectors = block_length // 512 * mult * (c_size + 1)
 
         # CMD16: set block length to 512 bytes
-        if self._cmd(16, 512, 0) != 0:
+        if self._cmd(16, 512, 0x15) != 0:
             raise OSError("can't set 512 block size")
 
         # set to high data rate now that it's initialised
@@ -190,10 +190,10 @@ class SDCard:
         ocr = bytearray(4)
         for _ in range(_CMD_TIMEOUT):
             time.sleep(.050)
-            self._cmd(58, response_buf=ocr, data_block=False)
-            self._cmd(55)
-            if self._block_cmd(41, 0x200000, 0) == 0:
-                self._cmd(58, response_buf=ocr, data_block=False)
+            self._cmd(58, 0, 0xfd, response_buf=ocr, data_block=False)
+            self._cmd(55, 0, 0x65)
+            if self._cmd(41, 0x40000000, 0x77) == 0:
+                self._cmd(58, 0, 0xfd, response_buf=ocr, data_block=False)
 
                 # Check for block addressing
                 if (ocr[0] & 0x40) != 0:
@@ -234,7 +234,11 @@ class SDCard:
         buf[2] = (arg >> 16) & 0xff
         buf[3] = (arg >> 8) & 0xff
         buf[4] = arg & 0xff
-        buf[5] = crc
+
+        if (crc == 0):
+            buf[5] = calculate_crc(buf[:-1])
+        else:
+            buf[5] = crc
 
         with self._spi as spi:
             if wait:
@@ -281,7 +285,11 @@ class SDCard:
         buf[2] = (block >> 7) & 0xff
         buf[3] = (block << 1) & 0xff
         buf[4] = 0
-        buf[5] = crc
+
+        if (crc == 0):
+            buf[5] = calculate_crc(buf[:-1])
+        else:
+            buf[5] = crc
 
         result = -1
         with self._spi as spi:
@@ -416,7 +424,7 @@ class SDCard:
                 self._readinto(buf, start=offset, end=(offset + 512))
                 offset += 512
                 nblocks -= 1
-            return self._cmd(12, wait=False)
+            return self._cmd(12, 0, 0x61, wait=False)
         return 0
 
     def writeblocks(self, start_block, buf):
@@ -447,3 +455,34 @@ class SDCard:
                 nblocks -= 1
             self._cmd_nodata(_TOKEN_STOP_TRAN, 0x0)
         return 0
+
+def calculate_crc(message):
+    """
+    Calculate the CRC of a message.
+    :param bytearray message: Where each index is a byte
+    """
+    # Code converted from https://github.com/hazelnusse/crc7/blob/master/crc7.cc by devoh747
+    # With permission from Dale Lukas Peterson <hazelnusse@gmail.com>
+    # 8/6/2019
+
+    crc_table = bytearray(256)
+
+    crc_poly = const(0x89)  # the value of our CRC-7 polynomial
+
+    # generate a table value for all 256 possible byte values
+    for i in range(256):
+        if (i & 0x80):
+            crc_table[i] = i ^ crc_poly
+        else:
+            crc_table[i] = i
+        for _ in range(1, 8):
+            crc_table[i] = crc_table[i] << 1
+            if (crc_table[i] & 0x80):
+                crc_table[i] = crc_table[i] ^ crc_poly
+
+    crc = 0
+    # All messages in _cmd are 5 bytes including the cmd.. The 6th byte is the crc value.
+    for i in range(0, 5):
+        crc = crc_table[(crc << 1) ^ message[i]]
+
+    return ((crc << 1) | 1)
