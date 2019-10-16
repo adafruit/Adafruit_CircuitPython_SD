@@ -81,6 +81,7 @@ class SDCard:
 
         :param ~busio.SPI spi: The SPI bus
         :param ~digitalio.DigitalInOut cs: The chip select connected to the card
+        :param int baudrate: The SPI data rate to use after card setup
 
         Example usage:
 
@@ -99,8 +100,9 @@ class SDCard:
             os.listdir('/')
 
         """
-    def __init__(self, spi, cs):
-        # This is the init baudrate. We create a second device for high speed.
+    def __init__(self, spi, cs, baudrate=1320000):
+        # This is the init baudrate.
+        # We create a second device with the target baudrate after card initialization.
         self._spi = spi_device.SPIDevice(spi, cs, baudrate=250000, extra_clocks=8)
 
         self._cmdbuf = bytearray(6)
@@ -109,8 +111,8 @@ class SDCard:
         # Card is byte addressing, set to 1 if addresses are per block
         self._cdv = 512
 
-        # initialise the card
-        self._init_card()
+        # initialise the card and switch to high speed
+        self._init_card(baudrate)
 
     def _clock_card(self, cycles=8):
         """
@@ -128,7 +130,7 @@ class SDCard:
             self._spi.spi.write(self._single_byte)
         self._spi.spi.unlock()
 
-    def _init_card(self):
+    def _init_card(self, baudrate):
         """Initialize the card in SPI mode."""
         # clock card at least cycles with cs high
         self._clock_card(80)
@@ -174,7 +176,7 @@ class SDCard:
 
         # set to high data rate now that it's initialised
         self._spi = spi_device.SPIDevice(self._spi.spi, self._spi.chip_select,
-                                         baudrate=1320000, extra_clocks=8)
+                                         baudrate=baudrate, extra_clocks=8)
 
     def _init_card_v1(self):
         """Initialize v1 SDCards which use byte addressing."""
@@ -253,6 +255,7 @@ class SDCard:
                     if response_buf:
                         if data_block:
                             # Wait for the start block byte
+                            buf[1] = 0xff
                             while buf[1] != 0xfe:
                                 spi.readinto(buf, start=1, end=2, write_value=0xff)
                         spi.readinto(response_buf, write_value=0xff)
@@ -456,17 +459,13 @@ class SDCard:
             self._cmd_nodata(_TOKEN_STOP_TRAN, 0x0)
         return 0
 
-def calculate_crc(message):
-    """
-    Calculate the CRC of a message.
-    :param bytearray message: Where each index is a byte
-    """
+def _calculate_crc_table():
+    """Precompute the table used in calculate_crc."""
     # Code converted from https://github.com/hazelnusse/crc7/blob/master/crc7.cc by devoh747
     # With permission from Dale Lukas Peterson <hazelnusse@gmail.com>
     # 8/6/2019
 
     crc_table = bytearray(256)
-
     crc_poly = const(0x89)  # the value of our CRC-7 polynomial
 
     # generate a table value for all 256 possible byte values
@@ -479,10 +478,19 @@ def calculate_crc(message):
             crc_table[i] = crc_table[i] << 1
             if (crc_table[i] & 0x80):
                 crc_table[i] = crc_table[i] ^ crc_poly
+    return crc_table
+
+CRC_TABLE = _calculate_crc_table()
+
+def calculate_crc(message):
+    """
+    Calculate the CRC of message[0:5], using a precomputed table in CRC_TABLE.
+    :param bytearray message: Where each index is a byte
+    """
 
     crc = 0
     # All messages in _cmd are 5 bytes including the cmd.. The 6th byte is the crc value.
     for i in range(0, 5):
-        crc = crc_table[(crc << 1) ^ message[i]]
+        crc = CRC_TABLE[(crc << 1) ^ message[i]]
 
     return ((crc << 1) | 1)
