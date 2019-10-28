@@ -135,67 +135,68 @@ class SDCard:
         # clock card at least cycles with cs high
         self._clock_card(80)
 
-        # CMD0: init card; should return _R1_IDLE_STATE (allow 5 attempts)
-        for _ in range(5):
-            if self._cmd(0, 0, 0x95) == _R1_IDLE_STATE:
-                break
-        else:
-            raise OSError("no SD card")
+        with self._spi as card:
+            # CMD0: init card; should return _R1_IDLE_STATE (allow 5 attempts)
+            for _ in range(5):
+                if self._cmd(card, 0, 0, 0x95) == _R1_IDLE_STATE:
+                    break
+            else:
+                raise OSError("no SD card")
 
-        # CMD8: determine card version
-        rb7 = bytearray(4)
-        r = self._cmd(8, 0x01aa, 0x87, rb7, data_block=False)
-        if r == _R1_IDLE_STATE:
-            self._init_card_v2()
-        elif r == (_R1_IDLE_STATE | _R1_ILLEGAL_COMMAND):
-            self._init_card_v1()
-        else:
-            raise OSError("couldn't determine SD card version")
+            # CMD8: determine card version
+            rb7 = bytearray(4)
+            r = self._cmd(card, 8, 0x01aa, 0x87, rb7, data_block=False)
+            if r == _R1_IDLE_STATE:
+                self._init_card_v2(card)
+            elif r == (_R1_IDLE_STATE | _R1_ILLEGAL_COMMAND):
+                self._init_card_v1(card)
+            else:
+                raise OSError("couldn't determine SD card version")
 
-        # get the number of sectors
-        # CMD9: response R2 (R1 byte + 16-byte block read)
-        csd = bytearray(16)
-        if self._cmd(9, 0, 0xaf, response_buf=csd) != 0:
-            raise OSError("no response from SD card")
-        #self.readinto(csd)
-        csd_version = (csd[0] & 0xc0) >> 6
-        if csd_version >= 2:
-            raise OSError("SD card CSD format not supported")
+            # get the number of sectors
+            # CMD9: response R2 (R1 byte + 16-byte block read)
+            csd = bytearray(16)
+            if self._cmd(card, 9, 0, 0xaf, response_buf=csd) != 0:
+                raise OSError("no response from SD card")
+            #self.readinto(csd)
+            csd_version = (csd[0] & 0xc0) >> 6
+            if csd_version >= 2:
+                raise OSError("SD card CSD format not supported")
 
-        if csd_version == 1:
-            self._sectors = ((csd[8] << 8 | csd[9]) + 1) * 1024
-        else:
-            block_length = 2 ** (csd[5] & 0xf)
-            c_size = ((csd[6] & 0x3) << 10) | (csd[7] << 2) | ((csd[8] & 0xc) >> 6)
-            mult = 2 ** (((csd[9] & 0x3) << 1 | (csd[10] & 0x80) >> 7) + 2)
-            self._sectors = block_length // 512 * mult * (c_size + 1)
+            if csd_version == 1:
+                self._sectors = ((csd[8] << 8 | csd[9]) + 1) * 1024
+            else:
+                block_length = 2 ** (csd[5] & 0xf)
+                c_size = ((csd[6] & 0x3) << 10) | (csd[7] << 2) | ((csd[8] & 0xc) >> 6)
+                mult = 2 ** (((csd[9] & 0x3) << 1 | (csd[10] & 0x80) >> 7) + 2)
+                self._sectors = block_length // 512 * mult * (c_size + 1)
 
-        # CMD16: set block length to 512 bytes
-        if self._cmd(16, 512, 0x15) != 0:
-            raise OSError("can't set 512 block size")
+            # CMD16: set block length to 512 bytes
+            if self._cmd(card, 16, 512, 0x15) != 0:
+                raise OSError("can't set 512 block size")
 
         # set to high data rate now that it's initialised
         self._spi = spi_device.SPIDevice(self._spi.spi, self._spi.chip_select,
                                          baudrate=baudrate, extra_clocks=8)
 
-    def _init_card_v1(self):
+    def _init_card_v1(self, card):
         """Initialize v1 SDCards which use byte addressing."""
         for _ in range(_CMD_TIMEOUT):
-            self._cmd(55, 0, 0)
-            if self._cmd(41, 0, 0) == 0:
+            self._cmd(card, 55, 0, 0)
+            if self._cmd(card, 41, 0, 0) == 0:
                 #print("[SDCard] v1 card")
                 return
         raise OSError("timeout waiting for v1 card")
 
-    def _init_card_v2(self):
+    def _init_card_v2(self, card):
         """Initialize v2 SDCards which use 512-byte block addressing."""
         ocr = bytearray(4)
         for _ in range(_CMD_TIMEOUT):
             time.sleep(.050)
-            self._cmd(58, 0, 0xfd, response_buf=ocr, data_block=False)
-            self._cmd(55, 0, 0x65)
-            if self._cmd(41, 0x40000000, 0x77) == 0:
-                self._cmd(58, 0, 0xfd, response_buf=ocr, data_block=False)
+            self._cmd(card, 58, 0, 0xfd, response_buf=ocr, data_block=False)
+            self._cmd(card, 55, 0, 0x65)
+            if self._cmd(card, 41, 0x40000000, 0x77) == 0:
+                self._cmd(card, 58, 0, 0xfd, response_buf=ocr, data_block=False)
 
                 # Check for block addressing
                 if (ocr[0] & 0x40) != 0:
@@ -204,25 +205,26 @@ class SDCard:
                 return
         raise OSError("timeout waiting for v2 card")
 
-    def _wait_for_ready(self, spi, timeout=0.3):
+    def _wait_for_ready(self, card, timeout=0.3):
         """
         Wait for the card to clock out 0xff to indicate its ready.
 
-        :param busio.SPI spi: The locked SPI bus.
+        :param busio.SPI card: The locked SPI bus.
         :param float timeout: Maximum time to wait in seconds.
         """
         start_time = time.monotonic()
         self._single_byte[0] = 0x00
         while time.monotonic() - start_time < timeout and self._single_byte[0] != 0xff:
-            spi.readinto(self._single_byte, write_value=0xff)
+            card.readinto(self._single_byte, write_value=0xff)
 
     # pylint: disable-msg=too-many-arguments
     # pylint: disable=no-member
     # no-member disable should be reconsidered when it can be tested
-    def _cmd(self, cmd, arg=0, crc=0, response_buf=None, data_block=True, wait=True):
+    def _cmd(self, card, cmd, arg=0, crc=0, response_buf=None, data_block=True, wait=True):
         """
         Issue a command to the card and read an optional data response.
 
+        :param busio.SPI card: The locked SPI bus.
         :param int cmd: The command number.
         :param int arg: The command argument.
         :param int crc: The crc to allow the card to verify the command and argument.
@@ -242,41 +244,41 @@ class SDCard:
         else:
             buf[5] = crc
 
-        with self._spi as spi:
-            if wait:
-                self._wait_for_ready(spi)
+        if wait:
+            self._wait_for_ready(card)
 
-            spi.write(buf)
+        card.write(buf)
 
-            # wait for the response (response[7] == 0)
-            for _ in range(_CMD_TIMEOUT):
-                spi.readinto(buf, end=1, write_value=0xff)
-                if not (buf[0] & 0x80):
-                    if response_buf:
-                        if data_block:
-                            # Wait for the start block byte
-                            buf[1] = 0xff
-                            while buf[1] != 0xfe:
-                                spi.readinto(buf, start=1, end=2, write_value=0xff)
-                        spi.readinto(response_buf, write_value=0xff)
-
-                        if data_block:
-                            # Read the checksum
-                            spi.readinto(buf, start=1, end=3, write_value=0xff)
-                    return buf[0]
+        # wait for the response (response[7] == 0)
+        for _ in range(_CMD_TIMEOUT):
+            card.readinto(buf, end=1, write_value=0xff)
+            if not (buf[0] & 0x80):
+                if response_buf:
+                    if data_block:
+                        # Wait for the start block byte
+                        buf[1] = 0xff
+                        while buf[1] != 0xfe:
+                            card.readinto(buf, start=1, end=2, write_value=0xff)
+                    card.readinto(response_buf, write_value=0xff)
+                    if data_block:
+                        # Read the checksum
+                        card.readinto(buf, start=1, end=3, write_value=0xff)
+                return buf[0]
         return -1
     #pylint: enable-msg=too-many-arguments
 
-    def _block_cmd(self, cmd, block, crc, response_buf=None):
+    # pylint: disable-msg=too-many-arguments
+    def _block_cmd(self, card, cmd, block, crc, response_buf=None):
         """
         Issue a command to the card with a block argument.
 
+        :param busio.SPI card: The locked SPI bus.
         :param int cmd: The command number.
         :param int block: The relevant block.
         :param int crc: The crc to allow the card to verify the command and argument.
         """
         if self._cdv == 1:
-            return self._cmd(cmd, block, crc, response_buf=response_buf)
+            return self._cmd(card, cmd, block, crc, response_buf=response_buf)
 
         # create and send the command
         buf = self._cmdbuf
@@ -295,68 +297,71 @@ class SDCard:
             buf[5] = crc
 
         result = -1
-        with self._spi as spi:
-            self._wait_for_ready(spi)
+        self._wait_for_ready(card)
 
-            spi.write(buf)
+        card.write(buf)
 
-            # wait for the response (response[7] == 0)
-            for _ in range(_CMD_TIMEOUT):
-                spi.readinto(buf, end=1, write_value=0xff)
-                if not (buf[0] & 0x80):
-                    result = buf[0]
-                    break
+        # wait for the response (response[7] == 0)
+        for _ in range(_CMD_TIMEOUT):
+            card.readinto(buf, end=1, write_value=0xff)
+            if not (buf[0] & 0x80):
+                result = buf[0]
+                break
 
         # pylint: disable=singleton-comparison
         # Disable should be removed when refactor can be tested.
         if response_buf != None and result == 0:
-            self._readinto(response_buf)
+            self._readinto(card, response_buf)
 
         return result
+    # pylint: enable-msg=too-many-arguments
 
-    def _cmd_nodata(self, cmd, response=0xff):
+    def _cmd_nodata(self, card, cmd, response=0xff):
         """
         Issue a command to the card with no argument.
 
+        :param busio.SPI card: The locked SPI bus.
         :param int cmd: The command number.
         """
         buf = self._cmdbuf
         buf[0] = cmd
         buf[1] = 0xff
 
-        with self._spi as spi:
-            spi.write(buf, end=2)
-            for _ in range(_CMD_TIMEOUT):
-                spi.readinto(buf, end=1, write_value=0xff)
-                if buf[0] == response:
-                    return 0    # OK
+        card.write(buf, end=2)
+        for _ in range(_CMD_TIMEOUT):
+            card.readinto(buf, end=1, write_value=0xff)
+            if buf[0] == response:
+                return 0    # OK
         return 1 # timeout
 
-    def _readinto(self, buf, start=0, end=None):
+    def _readinto(self, card, buf, start=0, end=None):
         """
         Read a data block into buf.
 
+        :param busio.SPI card: The locked SPI bus.
         :param bytearray buf: The buffer to write into
         :param int start: The first index to write data at
         :param int end: The index after the last byte to write to.
         """
         if end is None:
             end = len(buf)
-        with self._spi as spi:
-            # read until start byte (0xfe)
-            buf[start] = 0xff #busy
-            while buf[start] != 0xfe:
-                spi.readinto(buf, start=start, end=start+1, write_value=0xff)
 
-            spi.readinto(buf, start=start, end=end, write_value=0xff)
+        # read until start byte (0xfe)
+        buf[start] = 0xff #busy
+        while buf[start] != 0xfe:
+            card.readinto(buf, start=start, end=start+1, write_value=0xff)
 
-            # read checksum and throw it away
-            spi.readinto(self._cmdbuf, end=2, write_value=0xff)
+        card.readinto(buf, start=start, end=end, write_value=0xff)
 
-    def _write(self, token, buf, start=0, end=None):
+        # read checksum and throw it away
+        card.readinto(self._cmdbuf, end=2, write_value=0xff)
+
+    # pylint: disable-msg=too-many-arguments
+    def _write(self, card, token, buf, start=0, end=None):
         """
         Write a data block to the card.
 
+        :param busio.SPI card: The locked SPI bus.
         :param int token: The start token
         :param bytearray buf: The buffer to write from
         :param int start: The first index to read data from
@@ -365,34 +370,35 @@ class SDCard:
         cmd = self._cmdbuf
         if end is None:
             end = len(buf)
-        with self._spi as spi:
-            self._wait_for_ready(spi)
 
-            # send: start of block, data, checksum
-            cmd[0] = token
-            spi.write(cmd, end=1)
-            spi.write(buf, start=start, end=end)
-            cmd[0] = 0xff
-            cmd[1] = 0xff
-            spi.write(cmd, end=2)
+        self._wait_for_ready(card)
 
-            # check the response
-            # pylint: disable=no-else-return
-            # Disable should be removed when refactor can be tested
-            for _ in range(_CMD_TIMEOUT):
-                spi.readinto(cmd, end=1, write_value=0xff)
-                if not (cmd[0] & 0x80):
-                    if (cmd[0] & 0x1f) != 0x05:
-                        return -1
-                    else:
-                        break
+        # send: start of block, data, checksum
+        cmd[0] = token
+        card.write(cmd, end=1)
+        card.write(buf, start=start, end=end)
+        cmd[0] = 0xff
+        cmd[1] = 0xff
+        card.write(cmd, end=2)
 
-            # wait for write to finish
-            spi.readinto(cmd, end=1, write_value=0xff)
-            while cmd[0] == 0:
-                spi.readinto(cmd, end=1, write_value=0xff)
+        # check the response
+        # pylint: disable=no-else-return
+        # Disable should be removed when refactor can be tested
+        for _ in range(_CMD_TIMEOUT):
+            card.readinto(cmd, end=1, write_value=0xff)
+            if not (cmd[0] & 0x80):
+                if (cmd[0] & 0x1f) != 0x05:
+                    return -1
+                else:
+                    break
+
+        # wait for write to finish
+        card.readinto(cmd, end=1, write_value=0xff)
+        while cmd[0] == 0:
+            card.readinto(cmd, end=1, write_value=0xff)
 
         return 0 # worked
+    # pylint: enable-msg=too-many-arguments
 
     def count(self):
         """
@@ -412,22 +418,29 @@ class SDCard:
         """
         nblocks, err = divmod(len(buf), 512)
         assert nblocks and not err, 'Buffer length is invalid'
-        if nblocks == 1:
-            # CMD17: set read address for single block
-            # We use _block_cmd to read our data so that the chip select line
-            # isn't toggled between the command, response and data.
-            if self._block_cmd(17, start_block, 0, response_buf=buf) != 0:
-                return 1
-        else:
-            # CMD18: set read address for multiple blocks
-            if self._block_cmd(18, start_block, 0) != 0:
-                return 1
-            offset = 0
-            while nblocks:
-                self._readinto(buf, start=offset, end=(offset + 512))
-                offset += 512
-                nblocks -= 1
-            return self._cmd(12, 0, 0x61, wait=False)
+        with self._spi as card:
+            if nblocks == 1:
+                # CMD17: set read address for single block
+                # We use _block_cmd to read our data so that the chip select line
+                # isn't toggled between the command, response and data.
+                if self._block_cmd(card, 17, start_block, 0, response_buf=buf) != 0:
+                    return 1
+            else:
+                # CMD18: set read address for multiple blocks
+                if self._block_cmd(card, 18, start_block, 0) != 0:
+                    return 1
+                offset = 0
+                while nblocks:
+                    self._readinto(card, buf, start=offset, end=(offset + 512))
+                    offset += 512
+                    nblocks -= 1
+                ret = self._cmd(card, 12, 0, 0x61, wait=False)
+                # return first status 0 or last before card ready (0xff)
+                while ret != 0:
+                    card.readinto(self._single_byte, write_value=0xff)
+                    if self._single_byte[0] & 0x80:
+                        return ret
+                    ret = self._single_byte[0]
         return 0
 
     def writeblocks(self, start_block, buf):
@@ -439,24 +452,25 @@ class SDCard:
         """
         nblocks, err = divmod(len(buf), 512)
         assert nblocks and not err, 'Buffer length is invalid'
-        if nblocks == 1:
-            # CMD24: set write address for single block
-            if self._block_cmd(24, start_block, 0) != 0:
-                return 1
+        with self._spi as card:
+            if nblocks == 1:
+                # CMD24: set write address for single block
+                if self._block_cmd(card, 24, start_block, 0) != 0:
+                    return 1
 
-            # send the data
-            self._write(_TOKEN_DATA, buf)
-        else:
-            # CMD25: set write address for first block
-            if self._block_cmd(25, start_block, 0) != 0:
-                return 1
-            # send the data
-            offset = 0
-            while nblocks:
-                self._write(_TOKEN_CMD25, buf, start=offset, end=(offset + 512))
-                offset += 512
-                nblocks -= 1
-            self._cmd_nodata(_TOKEN_STOP_TRAN, 0x0)
+                # send the data
+                self._write(card, _TOKEN_DATA, buf)
+            else:
+                # CMD25: set write address for first block
+                if self._block_cmd(card, 25, start_block, 0) != 0:
+                    return 1
+                # send the data
+                offset = 0
+                while nblocks:
+                    self._write(card, _TOKEN_CMD25, buf, start=offset, end=(offset + 512))
+                    offset += 512
+                    nblocks -= 1
+                self._cmd_nodata(card, _TOKEN_STOP_TRAN, 0x0)
         return 0
 
 def _calculate_crc_table():
