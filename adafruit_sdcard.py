@@ -195,7 +195,9 @@ class SDCard:
             time.sleep(.050)
             self._cmd(card, 58, 0, 0xfd, response_buf=ocr, data_block=False)
             self._cmd(card, 55, 0, 0x65)
-            if self._cmd(card, 41, 0x40000000, 0x77) == 0:
+            # On non-longint builds, we cannot use 0x40000000 directly as the arg
+            # so break it into bytes, which are interpreted by self._cmd().
+            if self._cmd(card, 41, b'\x40\x00\x00\x00', 0x77) == 0:
                 self._cmd(card, 58, 0, 0xfd, response_buf=ocr, data_block=False)
 
                 # Check for block addressing
@@ -226,7 +228,7 @@ class SDCard:
 
         :param busio.SPI card: The locked SPI bus.
         :param int cmd: The command number.
-        :param int arg: The command argument.
+        :param int|buf(4) arg: The command argument
         :param int crc: The crc to allow the card to verify the command and argument.
         :param bytearray response_buf: Buffer to read a data block response into.
         :param bool data_block: True if the response data is in a data block.
@@ -234,10 +236,16 @@ class SDCard:
         # create and send the command
         buf = self._cmdbuf
         buf[0] = 0x40 | cmd
-        buf[1] = (arg >> 24) & 0xff
-        buf[2] = (arg >> 16) & 0xff
-        buf[3] = (arg >> 8) & 0xff
-        buf[4] = arg & 0xff
+        if isinstance(arg, int):
+            buf[1] = (arg >> 24) & 0xff
+            buf[2] = (arg >> 16) & 0xff
+            buf[3] = (arg >> 8) & 0xff
+            buf[4] = arg & 0xff
+        elif len(arg) == 4:
+            # arg can be a 4-byte buf
+            buf[1:5] = arg
+        else:
+            raise ValueError("bad arg")
 
         if (crc == 0):
             buf[5] = calculate_crc(buf[:-1])
