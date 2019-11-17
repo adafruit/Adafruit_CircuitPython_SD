@@ -245,7 +245,7 @@ class SDCard:
             # arg can be a 4-byte buf
             buf[1:5] = arg
         else:
-            raise ValueError("bad arg")
+            raise ValueError()
 
         if (crc == 0):
             buf[5] = calculate_crc(buf[:-1])
