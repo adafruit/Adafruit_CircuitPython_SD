@@ -65,17 +65,17 @@ __repo__ = "https://github.com/adafruit/Adafruit_CircuitPython_SD.git"
 _CMD_TIMEOUT = const(200)
 
 _R1_IDLE_STATE = const(1 << 0)
-#R1_ERASE_RESET = const(1 << 1)
+# R1_ERASE_RESET = const(1 << 1)
 _R1_ILLEGAL_COMMAND = const(1 << 2)
-#R1_COM_CRC_ERROR = const(1 << 3)
-#R1_ERASE_SEQUENCE_ERROR = const(1 << 4)
-#R1_ADDRESS_ERROR = const(1 << 5)
-#R1_PARAMETER_ERROR = const(1 << 6)
-_TOKEN_CMD25 = const(0xfc)
-_TOKEN_STOP_TRAN = const(0xfd)
-_TOKEN_DATA = const(0xfe)
+# R1_COM_CRC_ERROR = const(1 << 3)
+# R1_ERASE_SEQUENCE_ERROR = const(1 << 4)
+# R1_ADDRESS_ERROR = const(1 << 5)
+# R1_PARAMETER_ERROR = const(1 << 6)
+_TOKEN_CMD25 = const(0xFC)
+_TOKEN_STOP_TRAN = const(0xFD)
+_TOKEN_DATA = const(0xFE)
 
-#pylint: disable-msg=superfluous-parens
+# pylint: disable-msg=superfluous-parens
 class SDCard:
     """Controls an SD card over SPI.
 
@@ -100,6 +100,7 @@ class SDCard:
             os.listdir('/')
 
         """
+
     def __init__(self, spi, cs, baudrate=1320000):
         # This is the init baudrate.
         # We create a second device with the target baudrate after card initialization.
@@ -125,7 +126,7 @@ class SDCard:
         self._spi.spi.configure(baudrate=self._spi.baudrate)
         self._spi.chip_select.value = True
 
-        self._single_byte[0] = 0xff
+        self._single_byte[0] = 0xFF
         for _ in range(cycles // 8 + 1):
             self._spi.spi.write(self._single_byte)
         self._spi.spi.unlock()
@@ -145,7 +146,7 @@ class SDCard:
 
             # CMD8: determine card version
             rb7 = bytearray(4)
-            r = self._cmd(card, 8, 0x01aa, 0x87, rb7, data_block=False)
+            r = self._cmd(card, 8, 0x01AA, 0x87, rb7, data_block=False)
             if r == _R1_IDLE_STATE:
                 self._init_card_v2(card)
             elif r == (_R1_IDLE_STATE | _R1_ILLEGAL_COMMAND):
@@ -156,18 +157,18 @@ class SDCard:
             # get the number of sectors
             # CMD9: response R2 (R1 byte + 16-byte block read)
             csd = bytearray(16)
-            if self._cmd(card, 9, 0, 0xaf, response_buf=csd) != 0:
+            if self._cmd(card, 9, 0, 0xAF, response_buf=csd) != 0:
                 raise OSError("no response from SD card")
-            #self.readinto(csd)
-            csd_version = (csd[0] & 0xc0) >> 6
+            # self.readinto(csd)
+            csd_version = (csd[0] & 0xC0) >> 6
             if csd_version >= 2:
                 raise OSError("SD card CSD format not supported")
 
             if csd_version == 1:
                 self._sectors = ((csd[8] << 8 | csd[9]) + 1) * 1024
             else:
-                block_length = 2 ** (csd[5] & 0xf)
-                c_size = ((csd[6] & 0x3) << 10) | (csd[7] << 2) | ((csd[8] & 0xc) >> 6)
+                block_length = 2 ** (csd[5] & 0xF)
+                c_size = ((csd[6] & 0x3) << 10) | (csd[7] << 2) | ((csd[8] & 0xC) >> 6)
                 mult = 2 ** (((csd[9] & 0x3) << 1 | (csd[10] & 0x80) >> 7) + 2)
                 self._sectors = block_length // 512 * mult * (c_size + 1)
 
@@ -176,15 +177,16 @@ class SDCard:
                 raise OSError("can't set 512 block size")
 
         # set to high data rate now that it's initialised
-        self._spi = spi_device.SPIDevice(self._spi.spi, self._spi.chip_select,
-                                         baudrate=baudrate, extra_clocks=8)
+        self._spi = spi_device.SPIDevice(
+            self._spi.spi, self._spi.chip_select, baudrate=baudrate, extra_clocks=8
+        )
 
     def _init_card_v1(self, card):
         """Initialize v1 SDCards which use byte addressing."""
         for _ in range(_CMD_TIMEOUT):
             self._cmd(card, 55, 0, 0)
             if self._cmd(card, 41, 0, 0) == 0:
-                #print("[SDCard] v1 card")
+                # print("[SDCard] v1 card")
                 return
         raise OSError("timeout waiting for v1 card")
 
@@ -192,18 +194,18 @@ class SDCard:
         """Initialize v2 SDCards which use 512-byte block addressing."""
         ocr = bytearray(4)
         for _ in range(_CMD_TIMEOUT):
-            time.sleep(.050)
-            self._cmd(card, 58, 0, 0xfd, response_buf=ocr, data_block=False)
+            time.sleep(0.050)
+            self._cmd(card, 58, 0, 0xFD, response_buf=ocr, data_block=False)
             self._cmd(card, 55, 0, 0x65)
             # On non-longint builds, we cannot use 0x40000000 directly as the arg
             # so break it into bytes, which are interpreted by self._cmd().
-            if self._cmd(card, 41, b'\x40\x00\x00\x00', 0x77) == 0:
-                self._cmd(card, 58, 0, 0xfd, response_buf=ocr, data_block=False)
+            if self._cmd(card, 41, b"\x40\x00\x00\x00", 0x77) == 0:
+                self._cmd(card, 58, 0, 0xFD, response_buf=ocr, data_block=False)
 
                 # Check for block addressing
                 if (ocr[0] & 0x40) != 0:
                     self._cdv = 1
-                #print("[SDCard] v2 card")
+                # print("[SDCard] v2 card")
                 return
         raise OSError("timeout waiting for v2 card")
 
@@ -216,13 +218,15 @@ class SDCard:
         """
         start_time = time.monotonic()
         self._single_byte[0] = 0x00
-        while time.monotonic() - start_time < timeout and self._single_byte[0] != 0xff:
-            card.readinto(self._single_byte, write_value=0xff)
+        while time.monotonic() - start_time < timeout and self._single_byte[0] != 0xFF:
+            card.readinto(self._single_byte, write_value=0xFF)
 
     # pylint: disable-msg=too-many-arguments
     # pylint: disable=no-member
     # no-member disable should be reconsidered when it can be tested
-    def _cmd(self, card, cmd, arg=0, crc=0, response_buf=None, data_block=True, wait=True):
+    def _cmd(
+        self, card, cmd, arg=0, crc=0, response_buf=None, data_block=True, wait=True
+    ):
         """
         Issue a command to the card and read an optional data response.
 
@@ -237,17 +241,17 @@ class SDCard:
         buf = self._cmdbuf
         buf[0] = 0x40 | cmd
         if isinstance(arg, int):
-            buf[1] = (arg >> 24) & 0xff
-            buf[2] = (arg >> 16) & 0xff
-            buf[3] = (arg >> 8) & 0xff
-            buf[4] = arg & 0xff
+            buf[1] = (arg >> 24) & 0xFF
+            buf[2] = (arg >> 16) & 0xFF
+            buf[3] = (arg >> 8) & 0xFF
+            buf[4] = arg & 0xFF
         elif len(arg) == 4:
             # arg can be a 4-byte buf
             buf[1:5] = arg
         else:
             raise ValueError()
 
-        if (crc == 0):
+        if crc == 0:
             buf[5] = calculate_crc(buf[:-1])
         else:
             buf[5] = crc
@@ -259,21 +263,22 @@ class SDCard:
 
         # wait for the response (response[7] == 0)
         for _ in range(_CMD_TIMEOUT):
-            card.readinto(buf, end=1, write_value=0xff)
+            card.readinto(buf, end=1, write_value=0xFF)
             if not (buf[0] & 0x80):
                 if response_buf:
                     if data_block:
                         # Wait for the start block byte
-                        buf[1] = 0xff
-                        while buf[1] != 0xfe:
-                            card.readinto(buf, start=1, end=2, write_value=0xff)
-                    card.readinto(response_buf, write_value=0xff)
+                        buf[1] = 0xFF
+                        while buf[1] != 0xFE:
+                            card.readinto(buf, start=1, end=2, write_value=0xFF)
+                    card.readinto(response_buf, write_value=0xFF)
                     if data_block:
                         # Read the checksum
-                        card.readinto(buf, start=1, end=3, write_value=0xff)
+                        card.readinto(buf, start=1, end=3, write_value=0xFF)
                 return buf[0]
         return -1
-    #pylint: enable-msg=too-many-arguments
+
+    # pylint: enable-msg=too-many-arguments
 
     # pylint: disable-msg=too-many-arguments
     def _block_cmd(self, card, cmd, block, crc, response_buf=None):
@@ -294,12 +299,12 @@ class SDCard:
         # We address by byte because cdv is 512. Instead of multiplying, shift
         # the data to the correct spot so that we don't risk creating a long
         # int.
-        buf[1] = (block >> 15) & 0xff
-        buf[2] = (block >> 7) & 0xff
-        buf[3] = (block << 1) & 0xff
+        buf[1] = (block >> 15) & 0xFF
+        buf[2] = (block >> 7) & 0xFF
+        buf[3] = (block << 1) & 0xFF
         buf[4] = 0
 
-        if (crc == 0):
+        if crc == 0:
             buf[5] = calculate_crc(buf[:-1])
         else:
             buf[5] = crc
@@ -311,7 +316,7 @@ class SDCard:
 
         # wait for the response (response[7] == 0)
         for _ in range(_CMD_TIMEOUT):
-            card.readinto(buf, end=1, write_value=0xff)
+            card.readinto(buf, end=1, write_value=0xFF)
             if not (buf[0] & 0x80):
                 result = buf[0]
                 break
@@ -322,9 +327,10 @@ class SDCard:
             self._readinto(card, response_buf)
 
         return result
+
     # pylint: enable-msg=too-many-arguments
 
-    def _cmd_nodata(self, card, cmd, response=0xff):
+    def _cmd_nodata(self, card, cmd, response=0xFF):
         """
         Issue a command to the card with no argument.
 
@@ -333,14 +339,14 @@ class SDCard:
         """
         buf = self._cmdbuf
         buf[0] = cmd
-        buf[1] = 0xff
+        buf[1] = 0xFF
 
         card.write(buf, end=2)
         for _ in range(_CMD_TIMEOUT):
-            card.readinto(buf, end=1, write_value=0xff)
+            card.readinto(buf, end=1, write_value=0xFF)
             if buf[0] == response:
-                return 0    # OK
-        return 1 # timeout
+                return 0  # OK
+        return 1  # timeout
 
     def _readinto(self, card, buf, start=0, end=None):
         """
@@ -355,14 +361,14 @@ class SDCard:
             end = len(buf)
 
         # read until start byte (0xfe)
-        buf[start] = 0xff #busy
-        while buf[start] != 0xfe:
-            card.readinto(buf, start=start, end=start+1, write_value=0xff)
+        buf[start] = 0xFF  # busy
+        while buf[start] != 0xFE:
+            card.readinto(buf, start=start, end=start + 1, write_value=0xFF)
 
-        card.readinto(buf, start=start, end=end, write_value=0xff)
+        card.readinto(buf, start=start, end=end, write_value=0xFF)
 
         # read checksum and throw it away
-        card.readinto(self._cmdbuf, end=2, write_value=0xff)
+        card.readinto(self._cmdbuf, end=2, write_value=0xFF)
 
     # pylint: disable-msg=too-many-arguments
     def _write(self, card, token, buf, start=0, end=None):
@@ -385,27 +391,28 @@ class SDCard:
         cmd[0] = token
         card.write(cmd, end=1)
         card.write(buf, start=start, end=end)
-        cmd[0] = 0xff
-        cmd[1] = 0xff
+        cmd[0] = 0xFF
+        cmd[1] = 0xFF
         card.write(cmd, end=2)
 
         # check the response
         # pylint: disable=no-else-return
         # Disable should be removed when refactor can be tested
         for _ in range(_CMD_TIMEOUT):
-            card.readinto(cmd, end=1, write_value=0xff)
+            card.readinto(cmd, end=1, write_value=0xFF)
             if not (cmd[0] & 0x80):
-                if (cmd[0] & 0x1f) != 0x05:
+                if (cmd[0] & 0x1F) != 0x05:
                     return -1
                 else:
                     break
 
         # wait for write to finish
-        card.readinto(cmd, end=1, write_value=0xff)
+        card.readinto(cmd, end=1, write_value=0xFF)
         while cmd[0] == 0:
-            card.readinto(cmd, end=1, write_value=0xff)
+            card.readinto(cmd, end=1, write_value=0xFF)
 
-        return 0 # worked
+        return 0  # worked
+
     # pylint: enable-msg=too-many-arguments
 
     def count(self):
@@ -425,7 +432,7 @@ class SDCard:
         :param bytearray buf: The buffer to write into. Length must be multiple of 512.
         """
         nblocks, err = divmod(len(buf), 512)
-        assert nblocks and not err, 'Buffer length is invalid'
+        assert nblocks and not err, "Buffer length is invalid"
         with self._spi as card:
             if nblocks == 1:
                 # CMD17: set read address for single block
@@ -445,7 +452,7 @@ class SDCard:
                 ret = self._cmd(card, 12, 0, 0x61, wait=False)
                 # return first status 0 or last before card ready (0xff)
                 while ret != 0:
-                    card.readinto(self._single_byte, write_value=0xff)
+                    card.readinto(self._single_byte, write_value=0xFF)
                     if self._single_byte[0] & 0x80:
                         return ret
                     ret = self._single_byte[0]
@@ -459,7 +466,7 @@ class SDCard:
         :param bytearray buf: The buffer to write into. Length must be multiple of 512.
         """
         nblocks, err = divmod(len(buf), 512)
-        assert nblocks and not err, 'Buffer length is invalid'
+        assert nblocks and not err, "Buffer length is invalid"
         with self._spi as card:
             if nblocks == 1:
                 # CMD24: set write address for single block
@@ -475,11 +482,14 @@ class SDCard:
                 # send the data
                 offset = 0
                 while nblocks:
-                    self._write(card, _TOKEN_CMD25, buf, start=offset, end=(offset + 512))
+                    self._write(
+                        card, _TOKEN_CMD25, buf, start=offset, end=(offset + 512)
+                    )
                     offset += 512
                     nblocks -= 1
                 self._cmd_nodata(card, _TOKEN_STOP_TRAN, 0x0)
         return 0
+
 
 def _calculate_crc_table():
     """Precompute the table used in calculate_crc."""
@@ -492,17 +502,19 @@ def _calculate_crc_table():
 
     # generate a table value for all 256 possible byte values
     for i in range(256):
-        if (i & 0x80):
+        if i & 0x80:
             crc_table[i] = i ^ crc_poly
         else:
             crc_table[i] = i
         for _ in range(1, 8):
             crc_table[i] = crc_table[i] << 1
-            if (crc_table[i] & 0x80):
+            if crc_table[i] & 0x80:
                 crc_table[i] = crc_table[i] ^ crc_poly
     return crc_table
 
+
 CRC_TABLE = _calculate_crc_table()
+
 
 def calculate_crc(message):
     """
@@ -515,4 +527,4 @@ def calculate_crc(message):
     for i in range(0, 5):
         crc = CRC_TABLE[(crc << 1) ^ message[i]]
 
-    return ((crc << 1) | 1)
+    return (crc << 1) | 1
