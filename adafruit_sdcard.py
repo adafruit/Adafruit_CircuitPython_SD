@@ -79,27 +79,27 @@ _TOKEN_DATA = const(0xFE)
 class SDCard:
     """Controls an SD card over SPI.
 
-        :param ~busio.SPI spi: The SPI bus
-        :param ~digitalio.DigitalInOut cs: The chip select connected to the card
-        :param int baudrate: The SPI data rate to use after card setup
+    :param ~busio.SPI spi: The SPI bus
+    :param ~digitalio.DigitalInOut cs: The chip select connected to the card
+    :param int baudrate: The SPI data rate to use after card setup
 
-        Example usage:
+    Example usage:
 
-        .. code-block:: python
+    .. code-block:: python
 
-            import busio
-            import storage
-            import adafruit_sdcard
-            import os
-            import board
+        import busio
+        import storage
+        import adafruit_sdcard
+        import os
+        import board
 
-            spi = busio.SPI(SCK, MOSI, MISO)
-            sd = adafruit_sdcard.SDCard(spi, board.SD_CS)
-            vfs = storage.VfsFat(sdcard)
-            storage.mount(vfs, '/sd')
-            os.listdir('/')
+        spi = busio.SPI(SCK, MOSI, MISO)
+        sd = adafruit_sdcard.SDCard(spi, board.SD_CS)
+        vfs = storage.VfsFat(sdcard)
+        storage.mount(vfs, '/sd')
+        os.listdir('/')
 
-        """
+    """
 
     def __init__(self, spi, cs, baudrate=1320000):
         # This is the init baudrate.
