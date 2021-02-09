@@ -57,6 +57,16 @@ select (cs) connections.
     with open("/sd/test.txt", "w") as f:
         f.write("Hello world\n")
 
+Sharing the SPI bus with other devices
+======================================
+
+.. important::
+    If the same SPI bus is shared with other peripherals, it is important that
+    the SD card be initialized before accessing any other peripheral on the bus.
+    Failure to do so can prevent the SD card from being recognized until it is
+    powered off or re-inserted.
+
+
 Contributing
 ============
 
