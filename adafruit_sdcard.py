@@ -97,15 +97,17 @@ class SDCard:
         self._cdv = 512
 
         # initialise the card
-        self._init_card()
+        self._init_card(cs)
 
         # Create a new SPIDevice with the (probably) higher operating baudrate.
         self._spi = spi_device.SPIDevice(spi, cs, baudrate=baudrate, extra_clocks=8)
 
-    def _init_card(self):
+    def _init_card(self, chip_select):
         """Initialize the card in SPI mode."""
         # clock card at least 80 cycles with cs high
         with self._spi as card:
+            # Force CS high.
+            chip_select.value = True
             self._single_byte[0] = 0xFF
             for _ in range(80 // 8 + 1):
                 card.write(self._single_byte)
