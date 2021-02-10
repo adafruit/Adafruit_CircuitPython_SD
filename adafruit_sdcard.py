@@ -87,8 +87,7 @@ class SDCard:
     """
 
     def __init__(self, spi, cs, baudrate=1320000):
-        # This is the init baudrate.
-        # We create a second device with the target baudrate after card initialization.
+        # Create an SPIDevice running at a lower initialization baudrate first.
         self._spi = spi_device.SPIDevice(spi, cs, baudrate=250000, extra_clocks=8)
 
         self._cmdbuf = bytearray(6)
@@ -97,29 +96,21 @@ class SDCard:
         # Card is byte addressing, set to 1 if addresses are per block
         self._cdv = 512
 
-        # initialise the card and switch to high speed
-        self._init_card(baudrate)
+        # initialise the card
+        self._init_card(cs)
 
-    def _clock_card(self, cycles=8):
-        """
-        Clock the bus a minimum of `cycles` with the chip select high.
+        # Create a new SPIDevice with the (probably) higher operating baudrate.
+        self._spi = spi_device.SPIDevice(spi, cs, baudrate=baudrate, extra_clocks=8)
 
-        :param int cycles: The minimum number of clock cycles to cycle the bus.
-        """
-        while not self._spi.spi.try_lock():
-            pass
-        self._spi.spi.configure(baudrate=self._spi.baudrate)
-        self._spi.chip_select.value = True
-
-        self._single_byte[0] = 0xFF
-        for _ in range(cycles // 8 + 1):
-            self._spi.spi.write(self._single_byte)
-        self._spi.spi.unlock()
-
-    def _init_card(self, baudrate):
+    def _init_card(self, chip_select):
         """Initialize the card in SPI mode."""
-        # clock card at least cycles with cs high
-        self._clock_card(80)
+        # clock card at least 80 cycles with cs high
+        with self._spi as card:
+            # Force CS high.
+            chip_select.value = True
+            self._single_byte[0] = 0xFF
+            for _ in range(80 // 8 + 1):
+                card.write(self._single_byte)
 
         with self._spi as card:
             # CMD0: init card; should return _R1_IDLE_STATE (allow 5 attempts)
@@ -160,11 +151,6 @@ class SDCard:
             # CMD16: set block length to 512 bytes
             if self._cmd(card, 16, 512, 0x15) != 0:
                 raise OSError("can't set 512 block size")
-
-        # set to high data rate now that it's initialised
-        self._spi = spi_device.SPIDevice(
-            self._spi.spi, self._spi.chip_select, baudrate=baudrate, extra_clocks=8
-        )
 
     def _init_card_v1(self, card):
         """Initialize v1 SDCards which use byte addressing."""
