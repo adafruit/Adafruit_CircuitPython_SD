@@ -67,6 +67,11 @@ Sharing the SPI bus with other devices
     powered off or re-inserted.
 
 
+Documentation
+=============
+
+API documentation for this library can be found on `Read the Docs <https://circuitpython.readthedocs.io/projects/sd/en/latest/>`_.
+
 Contributing
 ============
 
