@@ -490,6 +490,7 @@ CRC_TABLE = _calculate_crc_table()
 def calculate_crc(message):
     """
     Calculate the CRC of message[0:5], using a precomputed table in CRC_TABLE.
+
     :param bytearray message: Where each index is a byte
     """
 
