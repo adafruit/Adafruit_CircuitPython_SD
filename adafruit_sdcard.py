@@ -44,6 +44,14 @@ import time
 from micropython import const
 from adafruit_bus_device import spi_device
 
+try:
+    from typing import Union, Optional
+    from busio import SPI
+    from digitalio import DigitalInOut
+    from circuitpython_typing import ReadableBuffer, WriteableBuffer
+except ImportError:
+    pass
+
 __version__ = "0.0.0-auto.0"
 __repo__ = "https://github.com/adafruit/Adafruit_CircuitPython_SD.git"
 
@@ -86,7 +94,7 @@ class SDCard:
 
     """
 
-    def __init__(self, spi, cs, baudrate=1320000):
+    def __init__(self, spi: SPI, cs: DigitalInOut, baudrate: int = 1320000) -> None:
         # Create an SPIDevice running at a lower initialization baudrate first.
         self._spi = spi_device.SPIDevice(spi, cs, baudrate=250000, extra_clocks=8)
 
@@ -102,7 +110,7 @@ class SDCard:
         # Create a new SPIDevice with the (probably) higher operating baudrate.
         self._spi = spi_device.SPIDevice(spi, cs, baudrate=baudrate, extra_clocks=8)
 
-    def _init_card(self, chip_select):
+    def _init_card(self, chip_select: DigitalInOut) -> None:
         """Initialize the card in SPI mode."""
         # clock card at least 80 cycles with cs high
         with self._spi as card:
@@ -152,7 +160,7 @@ class SDCard:
             if self._cmd(card, 16, 512, 0x15) != 0:
                 raise OSError("can't set 512 block size")
 
-    def _init_card_v1(self, card):
+    def _init_card_v1(self, card: SPI) -> None:
         """Initialize v1 SDCards which use byte addressing."""
         for _ in range(_CMD_TIMEOUT):
             self._cmd(card, 55, 0, 0)
@@ -161,7 +169,7 @@ class SDCard:
                 return
         raise OSError("timeout waiting for v1 card")
 
-    def _init_card_v2(self, card):
+    def _init_card_v2(self, card: SPI) -> None:
         """Initialize v2 SDCards which use 512-byte block addressing."""
         ocr = bytearray(4)
         for _ in range(_CMD_TIMEOUT):
@@ -180,7 +188,7 @@ class SDCard:
                 return
         raise OSError("timeout waiting for v2 card")
 
-    def _wait_for_ready(self, card, timeout=0.3):
+    def _wait_for_ready(self, card: SPI, timeout: float = 0.3) -> None:
         """
         Wait for the card to clock out 0xff to indicate its ready.
 
@@ -196,8 +204,15 @@ class SDCard:
     # pylint: disable=no-member
     # no-member disable should be reconsidered when it can be tested
     def _cmd(
-        self, card, cmd, arg=0, crc=0, response_buf=None, data_block=True, wait=True
-    ):
+        self,
+        card: SPI,
+        cmd: int,
+        arg: Union[int, ReadableBuffer] = 0,
+        crc: int = 0,
+        response_buf: Optional[WriteableBuffer] = None,
+        data_block: bool = True,
+        wait: bool = True,
+    ) -> int:
         """
         Issue a command to the card and read an optional data response.
 
@@ -205,8 +220,9 @@ class SDCard:
         :param int cmd: The command number.
         :param int|buf(4) arg: The command argument
         :param int crc: The crc to allow the card to verify the command and argument.
-        :param bytearray response_buf: Buffer to read a data block response into.
+        :param WriteableBuffer response_buf: Buffer to read a data block response into.
         :param bool data_block: True if the response data is in a data block.
+        :param bool wait: True if the command should wait until the card is ready
         """
         # create and send the command
         buf = self._cmdbuf
@@ -252,7 +268,14 @@ class SDCard:
     # pylint: enable-msg=too-many-arguments
 
     # pylint: disable-msg=too-many-arguments
-    def _block_cmd(self, card, cmd, block, crc, response_buf=None):
+    def _block_cmd(
+        self,
+        card: SPI,
+        cmd: int,
+        block: int,
+        crc: int,
+        response_buf: Optional[WriteableBuffer] = None,
+    ) -> int:
         """
         Issue a command to the card with a block argument.
 
@@ -260,6 +283,7 @@ class SDCard:
         :param int cmd: The command number.
         :param int block: The relevant block.
         :param int crc: The crc to allow the card to verify the command and argument.
+        :param WriteableBuffer response_buf: Buffer to read a data block response into.
         """
         if self._cdv == 1:
             return self._cmd(card, cmd, block, crc, response_buf=response_buf)
@@ -301,12 +325,13 @@ class SDCard:
 
     # pylint: enable-msg=too-many-arguments
 
-    def _cmd_nodata(self, card, cmd, response=0xFF):
+    def _cmd_nodata(self, card: SPI, cmd: int, response: int = 0xFF) -> int:
         """
         Issue a command to the card with no argument.
 
         :param busio.SPI card: The locked SPI bus.
         :param int cmd: The command number.
+        :param int response: The expected response, default is ``0xFF``
         """
         buf = self._cmdbuf
         buf[0] = cmd
@@ -319,12 +344,14 @@ class SDCard:
                 return 0  # OK
         return 1  # timeout
 
-    def _readinto(self, card, buf, start=0, end=None):
+    def _readinto(
+        self, card: SPI, buf: WriteableBuffer, start: int = 0, end: Optional[int] = None
+    ) -> None:
         """
         Read a data block into buf.
 
         :param busio.SPI card: The locked SPI bus.
-        :param bytearray buf: The buffer to write into
+        :param WriteableBuffer buf: The buffer to write into
         :param int start: The first index to write data at
         :param int end: The index after the last byte to write to.
         """
@@ -342,13 +369,20 @@ class SDCard:
         card.readinto(self._cmdbuf, end=2, write_value=0xFF)
 
     # pylint: disable-msg=too-many-arguments
-    def _write(self, card, token, buf, start=0, end=None):
+    def _write(
+        self,
+        card: SPI,
+        token: int,
+        buf: ReadableBuffer,
+        start: int = 0,
+        end: Optional[int] = None,
+    ) -> int:
         """
         Write a data block to the card.
 
         :param busio.SPI card: The locked SPI bus.
         :param int token: The start token
-        :param bytearray buf: The buffer to write from
+        :param ReadableBuffer buf: The buffer to write from
         :param int start: The first index to read data from
         :param int end: The index after the last byte to read from.
         """
@@ -386,7 +420,7 @@ class SDCard:
 
     # pylint: enable-msg=too-many-arguments
 
-    def count(self):
+    def count(self) -> int:
         """
         Returns the total number of sectors.
 
@@ -395,12 +429,12 @@ class SDCard:
         """
         return self._sectors
 
-    def readblocks(self, start_block, buf):
+    def readblocks(self, start_block: int, buf: WriteableBuffer) -> int:
         """
         Read one or more blocks from the card
 
         :param int start_block: The block to start reading from
-        :param bytearray buf: The buffer to write into. Length must be multiple of 512.
+        :param WriteableBuffer buf: The buffer to write into. Length must be multiple of 512.
         """
         nblocks, err = divmod(len(buf), 512)
         assert nblocks and not err, "Buffer length is invalid"
@@ -429,12 +463,12 @@ class SDCard:
                     ret = self._single_byte[0]
         return 0
 
-    def writeblocks(self, start_block, buf):
+    def writeblocks(self, start_block: int, buf: ReadableBuffer) -> int:
         """
         Write one or more blocks to the card
 
         :param int start_block: The block to start writing to
-        :param bytearray buf: The buffer to write into. Length must be multiple of 512.
+        :param ReadableBuffer buf: The buffer to write into. Length must be multiple of 512.
         """
         nblocks, err = divmod(len(buf), 512)
         assert nblocks and not err, "Buffer length is invalid"
@@ -462,7 +496,7 @@ class SDCard:
         return 0
 
 
-def _calculate_crc_table():
+def _calculate_crc_table() -> bytearray:
     """Precompute the table used in calculate_crc."""
     # Code converted from https://github.com/hazelnusse/crc7/blob/master/crc7.cc by devoh747
     # With permission from Dale Lukas Peterson <hazelnusse@gmail.com>
@@ -487,7 +521,7 @@ def _calculate_crc_table():
 CRC_TABLE = _calculate_crc_table()
 
 
-def calculate_crc(message):
+def calculate_crc(message: ReadableBuffer) -> int:
     """
     Calculate the CRC of message[0:5], using a precomputed table in CRC_TABLE.
 
