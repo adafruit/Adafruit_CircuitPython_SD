@@ -256,8 +256,12 @@ class SDCard:
                     if data_block:
                         # Wait for the start block byte
                         buf[1] = 0xFF
-                        while buf[1] != 0xFE:
+                        for _ in range(_CMD_TIMEOUT):
                             card.readinto(buf, start=1, end=2, write_value=0xFF)
+                            if buf[1] == 0xFE:
+                                break
+                        if buf[1] != 0xFE:
+                            return -1
                     card.readinto(response_buf, write_value=0xFF)
                     if data_block:
                         # Read the checksum
