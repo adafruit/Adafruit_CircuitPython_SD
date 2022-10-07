@@ -202,6 +202,7 @@ class SDCard:
 
     # pylint: disable-msg=too-many-arguments
     # pylint: disable=no-member
+    # pylint: disable-msg=too-many-branches
     # no-member disable should be reconsidered when it can be tested
     def _cmd(
         self,
@@ -248,6 +249,7 @@ class SDCard:
 
         card.write(buf)
 
+        # pylint: disable-msg=too-many-nested-blocks
         # wait for the response (response[7] == 0)
         for _ in range(_CMD_TIMEOUT):
             card.readinto(buf, end=1, write_value=0xFF)
@@ -269,6 +271,7 @@ class SDCard:
                 return buf[0]
         return -1
 
+    # pylint: enable-msg=too-many-branches
     # pylint: enable-msg=too-many-arguments
 
     # pylint: disable-msg=too-many-arguments
