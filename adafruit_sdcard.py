@@ -94,6 +94,7 @@ class SDCard:
 
     """
 
+    # pylint: disable=invalid-name
     def __init__(self, spi: SPI, cs: DigitalInOut, baudrate: int = 1320000) -> None:
         # Create an SPIDevice running at a lower initialization baudrate first.
         self._spi = spi_device.SPIDevice(spi, cs, baudrate=250000, extra_clocks=8)
