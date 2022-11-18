@@ -500,6 +500,7 @@ class SDCard:
                     )
                     offset += 512
                     nblocks -= 1
+                self._wait_for_ready(card)
                 self._cmd_nodata(card, _TOKEN_STOP_TRAN, 0x0)
         return 0
 
