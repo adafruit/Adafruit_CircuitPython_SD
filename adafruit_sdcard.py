@@ -73,7 +73,7 @@ class SDCard:
     """Controls an SD card over SPI.
 
     :param ~busio.SPI spi: The SPI bus
-    :param ~digitalio.DigitalInOut cs: The chip select connected to the card
+    :param ~digitalio.DigitalInOut chip_select: The chip select connected to the card
     :param int baudrate: The SPI data rate to use after card setup
 
     Example usage:
@@ -94,10 +94,13 @@ class SDCard:
 
     """
 
-    # pylint: disable=invalid-name
-    def __init__(self, spi: SPI, cs: DigitalInOut, baudrate: int = 1320000) -> None:
+    def __init__(
+        self, spi: SPI, chip_select: DigitalInOut, baudrate: int = 1320000
+    ) -> None:
         # Create an SPIDevice running at a lower initialization baudrate first.
-        self._spi = spi_device.SPIDevice(spi, cs, baudrate=250000, extra_clocks=8)
+        self._spi = spi_device.SPIDevice(
+            spi, chip_select, baudrate=250000, extra_clocks=8
+        )
 
         self._cmdbuf = bytearray(6)
         self._single_byte = bytearray(1)
@@ -106,10 +109,12 @@ class SDCard:
         self._cdv = 512
 
         # initialise the card
-        self._init_card(cs)
+        self._init_card(chip_select)
 
         # Create a new SPIDevice with the (probably) higher operating baudrate.
-        self._spi = spi_device.SPIDevice(spi, cs, baudrate=baudrate, extra_clocks=8)
+        self._spi = spi_device.SPIDevice(
+            spi, chip_select, baudrate=baudrate, extra_clocks=8
+        )
 
     def _init_card(self, chip_select: DigitalInOut) -> None:
         """Initialize the card in SPI mode."""
@@ -218,7 +223,7 @@ class SDCard:
         """
         Issue a command to the card and read an optional data response.
 
-        :param busio.SPI card: The locked SPI bus.
+        :param ~busio.SPI card: The locked SPI bus.
         :param int cmd: The command number.
         :param int|buf(4) arg: The command argument
         :param int crc: The crc to allow the card to verify the command and argument.
@@ -287,7 +292,7 @@ class SDCard:
         """
         Issue a command to the card with a block argument.
 
-        :param busio.SPI card: The locked SPI bus.
+        :param ~busio.SPI card: The locked SPI bus.
         :param int cmd: The command number.
         :param int block: The relevant block.
         :param int crc: The crc to allow the card to verify the command and argument.
@@ -337,9 +342,9 @@ class SDCard:
         """
         Issue a command to the card with no argument.
 
-        :param busio.SPI card: The locked SPI bus.
+        :param ~busio.SPI card: The locked SPI bus.
         :param int cmd: The command number.
-        :param int response: The expected response, default is ``0xFF``
+        :param int response: The expected response, default is :const:`0xFF`
         """
         buf = self._cmdbuf
         buf[0] = cmd
@@ -358,7 +363,7 @@ class SDCard:
         """
         Read a data block into buf.
 
-        :param busio.SPI card: The locked SPI bus.
+        :param ~busio.SPI card: The locked SPI bus.
         :param WriteableBuffer buf: The buffer to write into
         :param int start: The first index to write data at
         :param int end: The index after the last byte to write to.
@@ -388,7 +393,7 @@ class SDCard:
         """
         Write a data block to the card.
 
-        :param busio.SPI card: The locked SPI bus.
+        :param ~busio.SPI card: The locked SPI bus.
         :param int token: The start token
         :param ReadableBuffer buf: The buffer to write from
         :param int start: The first index to read data from
