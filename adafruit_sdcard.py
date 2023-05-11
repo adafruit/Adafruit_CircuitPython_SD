@@ -68,6 +68,7 @@ _TOKEN_CMD25 = const(0xFC)
 _TOKEN_STOP_TRAN = const(0xFD)
 _TOKEN_DATA = const(0xFE)
 
+
 # pylint: disable-msg=superfluous-parens
 class SDCard:
     """Controls an SD card over SPI.

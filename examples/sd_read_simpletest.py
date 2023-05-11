@@ -26,6 +26,7 @@ storage.mount(vfs, "/sd")
 
 # Use the filesystem as normal! Our files are under /sd
 
+
 # This helper function will print the contents of the SD
 def print_directory(path, tabs=0):
     for file in os.listdir(path):
