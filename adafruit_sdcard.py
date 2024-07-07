@@ -84,14 +84,16 @@ class SDCard:
         import busio
         import storage
         import adafruit_sdcard
+        import digitalio
         import os
         import board
 
         spi = busio.SPI(SCK, MOSI, MISO)
-        sd = adafruit_sdcard.SDCard(spi, board.SD_CS)
+        cs = digitalio.DigitalInOut(board.SD_CS)
+        sdcard = adafruit_sdcard.SDCard(spi, cs)
         vfs = storage.VfsFat(sdcard)
         storage.mount(vfs, '/sd')
-        os.listdir('/')
+        os.listdir('/sd')
 
     """
 
