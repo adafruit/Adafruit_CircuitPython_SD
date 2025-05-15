@@ -41,14 +41,16 @@ Implementation Notes
 """
 
 import time
-from micropython import const
+
 from adafruit_bus_device import spi_device
+from micropython import const
 
 try:
-    from typing import Union, Optional
+    from typing import Optional, Union
+
     from busio import SPI
-    from digitalio import DigitalInOut
     from circuitpython_typing import ReadableBuffer, WriteableBuffer
+    from digitalio import DigitalInOut
 except ImportError:
     pass
 
@@ -69,7 +71,6 @@ _TOKEN_STOP_TRAN = const(0xFD)
 _TOKEN_DATA = const(0xFE)
 
 
-# pylint: disable-msg=superfluous-parens
 class SDCard:
     """Controls an SD card over SPI.
 
@@ -97,7 +98,6 @@ class SDCard:
 
     """
 
-    # pylint: disable=invalid-name
     def __init__(self, spi: SPI, cs: DigitalInOut, baudrate: int = 1320000) -> None:
         # Create an SPIDevice running at a lower initialization baudrate first.
         self._spi = spi_device.SPIDevice(spi, cs, baudrate=250000, extra_clocks=8)
@@ -204,9 +204,6 @@ class SDCard:
         while time.monotonic() - start_time < timeout and self._single_byte[0] != 0xFF:
             card.readinto(self._single_byte, write_value=0xFF)
 
-    # pylint: disable-msg=too-many-arguments
-    # pylint: disable=no-member
-    # pylint: disable-msg=too-many-branches
     # no-member disable should be reconsidered when it can be tested
     def _cmd(
         self,
@@ -253,7 +250,6 @@ class SDCard:
 
         card.write(buf)
 
-        # pylint: disable-msg=too-many-nested-blocks
         # wait for the response (response[7] == 0)
         for _ in range(_CMD_TIMEOUT):
             card.readinto(buf, end=1, write_value=0xFF)
@@ -275,10 +271,6 @@ class SDCard:
                 return buf[0]
         return -1
 
-    # pylint: enable-msg=too-many-branches
-    # pylint: enable-msg=too-many-arguments
-
-    # pylint: disable-msg=too-many-arguments
     def _block_cmd(
         self,
         card: SPI,
@@ -327,14 +319,11 @@ class SDCard:
                 result = buf[0]
                 break
 
-        # pylint: disable=singleton-comparison
         # Disable should be removed when refactor can be tested.
         if response_buf != None and result == 0:
             self._readinto(card, response_buf)
 
         return result
-
-    # pylint: enable-msg=too-many-arguments
 
     def _cmd_nodata(self, card: SPI, cmd: int, response: int = 0xFF) -> int:
         """
@@ -379,7 +368,6 @@ class SDCard:
         # read checksum and throw it away
         card.readinto(self._cmdbuf, end=2, write_value=0xFF)
 
-    # pylint: disable-msg=too-many-arguments
     def _write(
         self,
         card: SPI,
@@ -412,7 +400,7 @@ class SDCard:
         card.write(cmd, end=2)
 
         # check the response
-        # pylint: disable=no-else-return
+
         # Disable should be removed when refactor can be tested
         for _ in range(_CMD_TIMEOUT):
             card.readinto(cmd, end=1, write_value=0xFF)
@@ -428,8 +416,6 @@ class SDCard:
             card.readinto(cmd, end=1, write_value=0xFF)
 
         return 0  # worked
-
-    # pylint: enable-msg=too-many-arguments
 
     def count(self) -> int:
         """
@@ -498,9 +484,7 @@ class SDCard:
                 # send the data
                 offset = 0
                 while nblocks:
-                    self._write(
-                        card, _TOKEN_CMD25, buf, start=offset, end=(offset + 512)
-                    )
+                    self._write(card, _TOKEN_CMD25, buf, start=offset, end=(offset + 512))
                     offset += 512
                     nblocks -= 1
                 self._wait_for_ready(card)
