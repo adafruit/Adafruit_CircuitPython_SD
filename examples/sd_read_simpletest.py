@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: MIT
 
 import os
+
+import board
 import busio
 import digitalio
-import board
 import storage
+
 import adafruit_sdcard
 
 # The SD_CS pin is the chip select line.
@@ -47,7 +49,7 @@ def print_directory(path, tabs=0):
         prettyprintname += file
         if isdir:
             prettyprintname += "/"
-        print("{0:<40} Size: {1:>10}".format(prettyprintname, sizestr))
+        print(f"{prettyprintname:<40} Size: {sizestr:>10}")
 
         # recursively print directory contents
         if isdir:
