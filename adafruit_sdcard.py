@@ -508,9 +508,9 @@ def _calculate_crc_table() -> bytearray:
         else:
             crc_table[i] = i
         for _ in range(1, 8):
-            crc_table[i] = crc_table[i] << 1
+            crc_table[i] <<= 1
             if crc_table[i] & 0x80:
-                crc_table[i] = crc_table[i] ^ crc_poly
+                crc_table[i] ^= crc_poly
     return crc_table
 
 
